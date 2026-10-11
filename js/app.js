@@ -136,6 +136,8 @@ function sessionList(day, s) {
   const list = s.ex.filter((e) => !rm.includes(e.n)).map((e) => ({ n: e.n, s: e.s, r: e.r }))
     .concat((day.extraEx || []).filter((n) => !rm.includes(n)).map((n) => ({ n, s: 2, r: "6–8", extra: true })))
     .concat(addl.filter((n) => !s.ex.some((e) => e.n === n)).map((n) => ({ n, s: s.key === "legs" ? 2 : 3, r: "6–8", added: true })));
+  const sn = log.setsN || {};
+  list.forEach((x) => { if (sn[x.n]) x.s = sn[x.n]; });
   const ord = log.order || [];
   if (ord.length) list.sort((a, b) => { const ia = ord.indexOf(a.n), ib = ord.indexOf(b.n); return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib); });
   return list;
@@ -285,6 +287,7 @@ function vErfolge() {
       `<section class="card span-12"><div class="card-h"><h3>Ziele bis 31. Januar</h3><span class="label">${Math.max(0, DAYS - Math.max(TI, 0))} Tage übrig</span></div><div class="goals">${goal("Rad-Kilometer", R.tot.km, 2000, "km", "rad")}${goal("Einheiten", R.doneAll, 112, "", "", (n) => n)}${goal("Krafteinheiten", R.tot.gym, 64, "", "kraft")}${goal("Höhenmeter", R.tot.hm, 3000, "Hm", "violet")}${goal("FTP", S.ftp || 0, fg || 220, "W", "gold", (n) => (n ? fN(n) : "–"), ftpProg())}</div></section>` +
       `<section class="card span-12"><div class="card-h"><h3>Abzeichen</h3><span class="label">${got} / ${R.badges.length} · je +100 XP</span></div><div class="badges">${R.badges.map((b) => `<div class="badge${b.got ? " got" : ""}"><span class="medal">${esc(b.k)}</span><div style="min-width:0"><div class="bt">${esc(b.t)}</div><div class="bd">${esc(b.d)}</div></div></div>`).join("")}</div></section>` +
       `<section class="card span-7"><div class="card-h"><h3>Strava</h3></div>${account}</section>` +
+      `<section class="card span-12"><div class="card-h"><h3>Musik im Training</h3><span class="label">Spotify</span></div><form class="exadd" data-music="1"><input type="text" name="u" value="${esc(musicUrl())}" placeholder="Spotify-Link deiner Playlist einfügen" aria-label="Spotify-Link"><button class="btn sm rad" type="submit">Speichern</button></form><span class="label" style="letter-spacing:.06em">In Spotify bei der Playlist auf Teilen → Link kopieren. Ganze Songs laufen, wenn du im selben Browser bei Spotify angemeldet bist.</span></section>` +
       `<section class="card span-5"><div class="card-h"><h3>Ausgangslage</h3><span class="label">Ø pro Woche · 14.9.–11.10.</span></div>${S.live ? `<div class="kpis" style="grid-template-columns:repeat(2,minmax(0,1fr))">${kpi("Rad", fN(bk.reduce((t, a) => t + a.km, 0) / 4), " km")}${kpi("Rad-Zeit", fN(bk.reduce((t, a) => t + a.min, 0) / 240, 1), " h")}${kpi("Kraft", fN(base.filter((a) => a.cat === "gym").length / 4, 1), "×")}${kpi("Gesamt", fN(base.reduce((t, a) => t + a.min, 0) / 240, 1), " h")}</div>` : `<p class="empty">Erscheint, sobald Strava verbunden ist.</p>`}</section>`,
   };
 }
@@ -426,6 +429,7 @@ $("main").addEventListener("click", (e) => {
 });
 $("main").addEventListener("submit", (e) => {
   const f = e.target; e.preventDefault();
+  if (f.dataset.music) { setMusic(f.elements.u.value.trim()); render(); return; }
   if (f.dataset.sessadd) { sessionEx(f.dataset.sessadd, f.dataset.k, f.elements.n.value, "add"); return; }
   if (f.classList.contains("exadd")) { addEx(f.dataset.k, f.elements.n.value); return; }
   if (f.dataset.tform === "ftp") { const v = +f.elements.v.value; setTest("ftp", +f.dataset.n, null, v > 0 ? v : null); toast(v > 0 ? "FTP " + ftpFrom20(v) + " W gespeichert" : "FTP-Wert gelöscht"); }
@@ -604,6 +608,23 @@ function confirmClear(btn, date) {
   }
   clearArmed = Date.now(); btn.textContent = "Wirklich löschen?"; btn.classList.add("danger");
   setTimeout(() => { if (btn.isConnected && Date.now() - clearArmed >= 4000) { btn.textContent = btn.dataset.label; btn.classList.remove("danger"); } }, 4100);
+}
+function setSetsN(date, key, name, n) {
+  if (!DB) return; const L = logOf(date, key); L.setsN = Object.assign({}, L.setsN || {}); L.setsN[name] = n;
+  const e = L.ex[name]; if (e && e.sets && e.sets.length > n) { e.sets = e.sets.slice(0, n); const ss = e.sets.filter(Boolean); e.s = ss.filter((z) => z.done || z.kg || z.r).length; if (!ss.some((z) => z.done)) { const c = S.C[date]; if (c && c.key === key && c.ex.includes(name)) toggleEx(date, key, name, true); } }
+  saveLog(date);
+}
+/* Spotify playlist for the training mode */
+function spotifyEmbed(url) {
+  const m = String(url || "").trim().match(/(?:open\.spotify\.com\/(?:intl-[a-z]+\/)?(?:embed\/)?|spotify:)(playlist|album|track|artist|show|episode)[\/:]([A-Za-z0-9]{10,40})/);
+  return m ? "https://open.spotify.com/embed/" + m[1] + "/" + m[2] + "?utm_source=generator&theme=0" : null;
+}
+function musicUrl() { const c = DB ? DB.load("wa.cfg") : {}; return c.music && c.music.url ? c.music.url : ""; }
+function setMusic(url) {
+  if (url && !spotifyEmbed(url)) { toast("Das ist kein Spotify-Link"); return false; }
+  saveCfg("music", url ? { url } : null);
+  try { const c = JSON.parse(localStorage.getItem("wa.cfg") || "{}"); if (url) c.music = { url }; else delete c.music; localStorage.setItem("wa.cfg", JSON.stringify(c)); } catch (_) {}
+  toast(url ? "Playlist gespeichert" : "Playlist entfernt"); return true;
 }
 function setNote(date, key, txt) { if (!DB) return; const L = logOf(date, key); L.note = String(txt || "").trim(); saveLog(date); toast(L.note ? "Notiz gespeichert" : "Notiz gelöscht"); }
 function saveCfg(key, val) { if (!DB) return; const ref = DB.doc("cfg/" + key); (val ? ref.set(val) : ref.delete()).catch(() => {}); }

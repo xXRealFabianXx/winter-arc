@@ -7,6 +7,7 @@ const Focus = (function () {
   const LK = "wa.live";
   let F = null, tick = null, wake = null, audio = null;
   const el = () => document.getElementById("focus");
+  const fc = () => { const f = el(); let c = document.getElementById("fcontent"); if (!c) { f.innerHTML = '<div id="fcontent"></div><div id="fmusic" class="f-music"></div>'; c = document.getElementById("fcontent"); } return c; };
   const save = () => { try { if (F) localStorage.setItem(LK, JSON.stringify(F)); else localStorage.removeItem(LK); } catch (_) {} };
   const loadLive = () => { try { return JSON.parse(localStorage.getItem(LK) || "null"); } catch (_) { return null; } };
   const mmss = (sec) => { sec = Math.max(0, Math.round(sec)); const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s2 = sec % 60; return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(s2).padStart(2, "0"); };
@@ -58,8 +59,16 @@ const Focus = (function () {
     }
     save(); open();
   }
+  function musicBar() {
+    const m = document.getElementById("fmusic"); if (!m) return;
+    const url = musicUrl(), emb = spotifyEmbed(url);
+    if (m.dataset.url === (emb || "") && m.childElementCount) return; // keep the player (and the music) running
+    m.dataset.url = emb || "";
+    if (emb) m.innerHTML = `<button type="button" class="f-mtoggle" data-fm="toggle"><span>♫</span><b>Musik</b><span class="label">Spotify</span></button><div class="f-mplayer" hidden><iframe src="${emb}" title="Spotify-Player" width="100%" height="152" frameborder="0" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe></div>`;
+    else m.innerHTML = `<button type="button" class="f-mtoggle" data-fm="toggle"><span>♫</span><b>Playlist verbinden</b><span class="label">Spotify</span></button><div class="f-mplayer" hidden><form class="exadd" data-fmusic="1"><input type="text" name="u" placeholder="Spotify-Link der Playlist" aria-label="Spotify-Link"><button class="btn sm rad" type="submit">Speichern</button></form><span class="label" style="letter-spacing:.06em">In Spotify: Playlist → Teilen → Link kopieren.</span></div>`;
+  }
   function open() {
-    const f = el(); f.hidden = false; document.body.classList.add("focus-open");
+    const f = el(); fc(); f.hidden = false; document.body.classList.add("focus-open"); musicBar();
     f.dataset.cat = F.cat; f.dataset.intro = "1"; setTimeout(() => { f.dataset.intro = "0"; }, 2800); keepAwake(); draw();
     clearInterval(tick); tick = setInterval(onTick, 250);
   }
@@ -166,25 +175,34 @@ const Focus = (function () {
     const { s, items } = list(), it = items[F.i];
     const dots = `<div class="f-dots">${items.map((x, i) => { const L = S.L[F.date], e = L && L.ex[x.n], n = e && e.sets ? e.sets.filter(Boolean).length : 0; return `<button type="button" class="f-dot${i === F.i ? " cur" : ""}${n ? " ok" : ""}" data-fj="${i}" aria-label="${esc(x.n)}"></button>`; }).join("")}</div>`;
     if (F.phase === "summary") return drawSummary(f, s, items);
-    const st = f.scrollTop, ln = lastNote(F.key, F.date);
+    const st = el().scrollTop, ln = lastNote(F.key, F.date);
     let tot = 0, dn = 0;
     const cards = items.map((x) => {
-      const sets = s.test ? 1 : x.s, last = lastLog(x.n, F.date);
+      const sets = x.s || 1, last = lastLog(x.n, F.date);
       for (let i = 0; i < sets; i++) { tot++; const z = setOf(x.n, i); if (z && z.done) dn++; }
       const tag = x.extra ? "Nachholen · " : x.added ? "Zusätzlich · " : "";
       return `<section class="f-excard" data-sort-id="${esc(x.n)}"><div class="f-exh"><span class="grip" role="button" tabindex="0" aria-label="${esc(x.n)} verschieben: festhalten und ziehen">⠿</span>
-        <div class="f-exn"><b>${esc(x.n)}</b><span class="label">${tag}${s.test ? "Test · 6 saubere Wdh." : esc(sets + " × " + x.r + " Wdh.")}${last ? " · zuletzt " + esc(logTxt(last)) : ""}</span></div>
-        <button type="button" class="f-rm" data-frm="${esc(x.n)}" aria-label="${esc(x.n)} aus diesem Training entfernen">✕</button></div>${setTable(x, sets, last)}</section>`;
+        <div class="f-exn"><b class="${x.n.length > 13 ? "long" : ""}">${esc(x.n)}</b><span class="label">${tag}${s.test ? "Test · 6 saubere Wdh." : esc(sets + " × " + x.r + " Wdh.")}${last ? " · zuletzt " + esc(logTxt(last)) : ""}</span></div>
+        <button type="button" class="f-rm" data-frm="${esc(x.n)}" aria-label="${esc(x.n)} aus diesem Training entfernen">✕</button></div>${setTable(x, sets, last)}
+        <div class="f-setsadj"><button type="button" class="btn sm" data-fsets="-1" data-n="${esc(x.n)}" data-cur="${sets}" ${sets <= 1 ? "disabled" : ""}>− Satz</button><span class="label">${sets} ${sets === 1 ? "Satz" : "Sätze"}</span><button type="button" class="btn sm" data-fsets="1" data-n="${esc(x.n)}" data-cur="${sets}" ${sets >= 10 ? "disabled" : ""}>+ Satz</button></div></section>`;
     }).join("");
-    f.innerHTML = head(s.title, s.test ? "Testtraining" : "Krafttraining") + `<div class="f-session calm"><div><span class="label">Im Training seit</span><b class="num" id="fsess">${mmss((Date.now() - F.started) / 1000)}</b></div><div class="f-prog"><span class="label">Sätze</span><b class="num" id="fprog">${dn}/${tot}</b></div></div>
+    fc().innerHTML = head(s.title, s.test ? "Testtraining" : "Krafttraining") + `<div class="f-session calm"><div><span class="label">Im Training seit</span><b class="num" id="fsess">${mmss((Date.now() - F.started) / 1000)}</b></div><div class="f-prog"><span class="label">Sätze</span><b class="num" id="fprog">${dn}/${tot}</b></div><button type="button" class="btn sm kraft f-addbtn" data-f="addopen">+ Übung</button></div>
+      <div class="f-addpanel" id="faddpanel" ${F.addOpen ? "" : "hidden"}><form class="exadd" data-fadd="1"><input type="text" name="n" placeholder="Name der Übung" maxlength="40" autocomplete="off" required aria-label="Übung zu diesem Training hinzufügen"><button class="btn sm kraft" type="submit">Hinzufügen</button></form>
+        <div class="f-sugg">${suggestions(items).map((n) => `<button type="button" class="opt sm" data-fsugg="${esc(n)}"><b>+ ${esc(n)}</b></button>`).join("")}</div></div>
       <div class="f-body">
       ${ln ? `<div class="lastnote"><span class="label">Notiz vom letzten Mal · ${dm(ln.date)}</span><p>${esc(ln.note)}</p></div>` : ""}
       <div class="f-exlist" data-sort="sess|${F.date}|${F.key}">${cards || `<p class="empty">Keine Übungen. Füg unten welche hinzu.</p>`}</div>
-      <form class="exadd" data-fadd="1"><input type="text" name="n" placeholder="Übung hinzufügen" maxlength="40" autocomplete="off" required aria-label="Übung zu diesem Training hinzufügen"><button class="btn sm kraft" type="submit">Hinzufügen</button></form>
+      <button type="button" class="btn f-addwide" data-f="addopen">+ Übung hinzufügen</button>
       <span class="label" style="letter-spacing:.06em">Kreis antippen hakt den Satz ab. Gewicht und Wiederholungen sind optional, trag sie ein, wann du willst. Reihenfolge am Griff ⠿ ändern.</span>
       <button type="button" class="btn kraft f-cta" data-f="summary">Training abschließen</button>
       <button type="button" class="btn ghost-danger" data-f="reset" data-label="Training verwerfen">Training verwerfen</button></div>`;
-    f.scrollTop = st;
+    el().scrollTop = st;
+  }
+  function suggestions(items) {
+    const have = new Set(items.map((x) => x.n.toLowerCase())), out = [];
+    ["push", "pull", "legs"].forEach((k) => baseList(k).forEach((e) => { if (!have.has(e.n.toLowerCase()) && !out.includes(e.n)) out.push(e.n); }));
+    Object.values(S.L).forEach((l) => (l.extra || []).forEach((n) => { if (!have.has(n.toLowerCase()) && !out.includes(n)) out.push(n); }));
+    return out.slice(0, 12);
   }
   function refreshProgress() { const f = el(); let tot = 0, dn = 0; f.querySelectorAll(".f-exlist .f-setrow").forEach((r) => { tot++; if (r.classList.contains("ok")) dn++; }); const p = document.getElementById("fprog"); if (p) p.textContent = dn + "/" + tot; }
   function setTable(it, sets, last) {
@@ -210,7 +228,7 @@ const Focus = (function () {
       return `<li><span>${esc(x.n)}</span><span class="num">${ss.length ? ss.map((z) => (z.kg ? fN(z.kg, 1) : "–") + "×" + (z.r || "–")).join("  ") : "ausgelassen"}</span></li>`;
     }).join("");
     const mins = Math.round((Date.now() - F.started) / 60000);
-    f.innerHTML = head(s.title, "Abschluss") + `<div class="f-body sum">
+    fc().innerHTML = head(s.title, "Abschluss") + `<div class="f-body sum">
       <h2 class="xl grad-done">Stark.</h2>
       <div class="kpis" style="grid-template-columns:repeat(3,minmax(0,1fr))"><div class="kpi"><span class="label">Sätze</span><span class="v num">${setsN}</span></div><div class="kpi"><span class="label">Bewegt</span><span class="v num">${fN(vol / 1000, 1)}<small>t</small></span></div><div class="kpi"><span class="label">Dauer</span><span class="v num">${mins}<small>min</small></span></div></div>
       <ul class="f-sum">${rows}</ul>
@@ -224,7 +242,7 @@ const Focus = (function () {
     const e = bikeElapsed(), s = sessFor(F.date, "free");
     const zones = [["Z1", "Erholung", "{Z2}", 0], ["Z2", "Grundlage", "{Z2}"], ["Z3", "Tempo", "{TEMPO}"], ["SS", "Sweetspot", "{SS}"], ["Z4", "Schwelle", "{SCHW}"], ["Z5", "VO2max", "{VO2}"]].slice(1);
     if (F.phase === "summary") {
-      f.innerHTML = head("Freie Fahrt", "Geschafft") + `<div class="f-body sum"><h2 class="xl grad-rad">Stark.</h2>
+      fc().innerHTML = head("Freie Fahrt", "Geschafft") + `<div class="f-body sum"><h2 class="xl grad-rad">Stark.</h2>
         <div class="kpis" style="grid-template-columns:repeat(2,minmax(0,1fr))"><div class="kpi"><span class="label">Gefahren</span><span class="v num">${mmss(e)}</span></div><div class="kpi"><span class="label">Runden</span><span class="v num">${F.laps.length}</span></div></div>
         ${F.laps.length ? `<ul class="f-sum">${F.laps.map((x, i) => `<li><span>Runde ${i + 1}</span><span class="num">${mmss(x - (i ? F.laps[i - 1] : 0))}</span></li>`).join("")}</ul>` : ""}
         ${feedbackBlock(dayFor(F.date), { cat: "gym" })}
@@ -232,7 +250,7 @@ const Focus = (function () {
         <span class="label" style="letter-spacing:.06em">Die Fahrt zählt automatisch als Radeinheit, sobald sie in Strava ist. War eigentlich ein Intervalltraining dran, gib unter Heute „Andere Einheit“ an, dann wird es nachgeholt.</span></div>`;
       return;
     }
-    f.innerHTML = head("Freie Fahrt", F.runFrom ? "Läuft" : F.phase === "go" ? "Bereit" : "Pause") + `<div class="f-body bike">
+    fc().innerHTML = head("Freie Fahrt", F.runFrom ? "Läuft" : F.phase === "go" ? "Bereit" : "Pause") + `<div class="f-body bike">
       <div class="f-ex"><span class="label">Einfach fahren</span><h2 class="xl grad-rad">Ohne Plan</h2><span class="f-last">Keine Vorgaben. Die Zonen unten helfen bei der Orientierung.</span></div>
       <div class="f-bigwrap"><span class="f-ripple" aria-hidden="true"><i></i><i></i><i></i></span><div class="f-big num" id="bfree">${mmss(e)}</div></div>
       <div class="f-total"><span class="label">Aktuelle Runde</span><span class="num" id="blap">${mmss(e - (F.laps.length ? F.laps[F.laps.length - 1] : 0))}</span></div>
@@ -248,7 +266,7 @@ const Focus = (function () {
     let t = 0, cur = segs.length - 1; for (let i = 0; i < segs.length; i++) { if (e < t + segs[i].d) { cur = i; break; } t += segs[i].d; } F.cur = cur;
     const seg = segs[cur], next = segs[cur + 1];
     if (F.phase === "summary") {
-      f.innerHTML = head(s.title, "Geschafft") + `<div class="f-body sum"><h2 class="xl grad-rad">Stark.</h2>
+      fc().innerHTML = head(s.title, "Geschafft") + `<div class="f-body sum"><h2 class="xl grad-rad">Stark.</h2>
         <div class="kpis" style="grid-template-columns:repeat(2,minmax(0,1fr))"><div class="kpi"><span class="label">Gefahren</span><span class="v num">${mmss(e)}</span></div><div class="kpi"><span class="label">Abschnitte</span><span class="v num">${segs.length}</span></div></div>
         ${feedbackBlock(dayFor(F.date), s)}
         ${/FTP/.test(s.title) ? `<button type="button" class="btn rad f-cta" data-f="tests">20′-Schnitt eintragen</button>` : ""}
@@ -256,7 +274,7 @@ const Focus = (function () {
         <span class="label" style="letter-spacing:.06em">Die Fahrt zählt automatisch, sobald sie in Strava ist.</span></div>`;
       return;
     }
-    f.innerHTML = head(s.title, F.runFrom ? "Läuft" : F.phase === "go" ? "Bereit" : "Pause") + `<div class="f-body bike">
+    fc().innerHTML = head(s.title, F.runFrom ? "Läuft" : F.phase === "go" ? "Bereit" : "Pause") + `<div class="f-body bike">
       <div class="f-segs">${segs.map((x, i) => `<span class="${i < cur ? "ok" : i === cur ? "cur" : ""}${x.hard ? " hard" : ""}" style="flex:${x.d}"></span>`).join("")}</div>
       <div class="f-ex"><span class="label">${next ? "Abschnitt " + (cur + 1) + " von " + segs.length : "Letzter Abschnitt"}</span><h2 class="xl ${seg.hard ? "grad-rad" : ""}">${esc(seg.n)}</h2>
         ${seg.z ? `<span class="f-watt num">${esc(watts(seg.z))}</span>` : ""}${seg.info ? `<span class="f-last">${esc(seg.info)}</span>` : ""}</div>
@@ -281,6 +299,9 @@ const Focus = (function () {
       const row = fs0.closest(".f-setrow"); row.classList.toggle("ok", on); fs0.setAttribute("aria-pressed", String(on)); fs0.textContent = on ? "✓" : String(i + 1);
       refreshProgress(); try { if (on && navigator.vibrate) navigator.vibrate(12); } catch (_) {} return;
     }
+    const fm = ev.target.closest("[data-fm]"); if (fm) { const p = el().querySelector(".f-mplayer"); if (p) { p.hidden = !p.hidden; fm.classList.toggle("on", !p.hidden); } return; }
+    const sg = ev.target.closest("[data-fsugg]"); if (sg) { sessionEx(F.date, F.key, sg.dataset.fsugg, "add"); F.addOpen = false; save(); draw(); const L = el().querySelector(".f-exlist"); if (L && L.lastElementChild) L.lastElementChild.scrollIntoView({ block: "center", behavior: "smooth" }); return; }
+    const ss = ev.target.closest("[data-fsets]"); if (ss && !ss.disabled) { const n = Math.max(1, Math.min(10, +ss.dataset.cur + +ss.dataset.fsets)); setSetsN(F.date, F.key, ss.dataset.n, n); draw(); return; }
     const rmx = ev.target.closest("[data-frm]"); if (rmx) { sessionEx(F.date, F.key, rmx.dataset.frm, "remove"); draw(); return; }
     const fs = ev.target.closest("[data-fset]"); if (fs) { const box = fs.closest(".f-sumex"); if (box) { const name = box.querySelector("summary span").textContent; const cur = setOf(name, +fs.dataset.fset); writeSet(name, +fs.dataset.fset, { done: !(cur && cur.done) }); const open = [...el().querySelectorAll(".f-sumex")].map((d) => d.open); draw(); el().querySelectorAll(".f-sumex").forEach((d, k) => { d.open = open[k]; }); } else toggleSet(+fs.dataset.fset); return; }
     const b = ev.target.closest("[data-f]"); if (!b || b.disabled) return;
@@ -289,6 +310,7 @@ const Focus = (function () {
     else if (a === "kg-" || a === "kg+") { const v = (parseFloat(String(kg.value).replace(",", ".")) || 0) + (a === "kg+" ? 2.5 : -2.5); kg.value = Math.max(0, v); }
     else if (a === "r-" || a === "r+") { rp.value = Math.max(0, (parseInt(rp.value, 10) || 0) + (a === "r+" ? 1 : -1)); }
     else if (a === "set") doneSet();
+    else if (a === "addopen") { F.addOpen = !F.addOpen; save(); const p = document.getElementById("faddpanel"); if (p) { p.hidden = !F.addOpen; if (F.addOpen) { el().scrollTo({ top: 0, behavior: "smooth" }); const i = p.querySelector("input"); if (i) setTimeout(() => i.focus(), 250); } } }
     else if (a === "summary") { F.phase = "summary"; save(); draw(); el().scrollTop = 0; }
     else if (a === "skip") { F.phase = "go"; save(); draw(); }
     else if (a === "rest-" || a === "rest+") { const d = a === "rest+" ? 15 : -15; F.restDur = Math.max(15, F.restDur + d); F.restEnd += d * 1000; save(); onTick(); }
@@ -310,7 +332,7 @@ const Focus = (function () {
     }
     else if (a === "reset") confirmReset(b, F.date);
   });
-  document.addEventListener("submit", (ev) => { const f = el(); if (!f || f.hidden || !f.contains(ev.target)) return; const fm = ev.target; if (fm.dataset.fadd) { ev.preventDefault(); sessionEx(F.date, F.key, fm.elements.n.value, "add"); draw(); const L = el().querySelector(".f-exlist"); if (L && L.lastElementChild) L.lastElementChild.scrollIntoView({ block: "center" }); } });
+  document.addEventListener("submit", (ev) => { const f = el(); if (!f || f.hidden || !f.contains(ev.target)) return; const fm = ev.target; if (fm.dataset.fmusic) { ev.preventDefault(); if (setMusic(fm.elements.u.value.trim())) { const m = document.getElementById("fmusic"); m.dataset.url = "x"; musicBar(); const p = el().querySelector(".f-mplayer"); if (p) p.hidden = false; } return; } if (fm.dataset.fadd) { ev.preventDefault(); sessionEx(F.date, F.key, fm.elements.n.value, "add"); F.addOpen = false; save(); draw(); const L = el().querySelector(".f-exlist"); if (L && L.lastElementChild) L.lastElementChild.scrollIntoView({ block: "center" }); } });
   document.addEventListener("change", (ev) => { const f = el(); if (!f || f.hidden || !f.contains(ev.target)) return; const fi = ev.target.closest("[data-fin]"); if (fi) { onSetInput(fi); return; } const nt = ev.target.closest("[data-note]"); if (nt) setNote(nt.dataset.note, nt.dataset.k, nt.value); });
   document.addEventListener("visibilitychange", () => { if (!document.hidden && F && !el().hidden) { keepAwake(); onTick(); } });
   setInterval(() => { if (!F) return; const t = mmss((Date.now() - F.started) / 1000); const c = document.getElementById("fclock"); if (c) c.textContent = t; const s2 = document.getElementById("fsess"); if (s2) s2.textContent = t; }, 1000);

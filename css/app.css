@@ -520,3 +520,23 @@ body.focus-open{overflow:hidden}
 .f-excard .f-setrow{grid-template-columns:46px minmax(0,1fr) minmax(0,1fr)}
 .f-excard .f-setrow input{min-height:46px;font-size:1.5rem !important}
 .f-excard.dragging{box-shadow:0 18px 40px rgba(0,0,0,.5)}
+
+/* sets per exercise, add panel, music bar */
+.f-setsadj{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.f-setsadj .btn{min-width:96px}
+.f-session.calm{flex-wrap:wrap}
+.f-addbtn{min-height:40px}
+.f-addpanel{display:flex;flex-direction:column;gap:10px;margin-top:10px;background:var(--card);border:1px solid var(--line-hi);border-radius:20px;padding:12px}
+.f-sugg{display:flex;flex-wrap:wrap;gap:6px}
+.f-sugg .opt.sm{flex:0 1 auto}
+.f-addwide{border-style:dashed;min-height:52px}
+.focus{padding-bottom:calc(env(safe-area-inset-bottom,0px) + 92px)}
+.f-music{position:fixed;left:12px;right:12px;bottom:calc(10px + env(safe-area-inset-bottom,0px));z-index:5;max-width:620px;margin:0 auto;display:flex;flex-direction:column;gap:8px;
+  background:color-mix(in srgb,var(--card-solid) 88%,transparent);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border:1px solid var(--line-hi);border-radius:20px;padding:8px;box-shadow:var(--shadow)}
+.f-music:empty{display:none}
+.f-mtoggle{display:flex;align-items:center;gap:10px;min-height:40px;padding:0 8px;width:100%;text-align:left}
+.f-mtoggle span:first-child{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:#1ED760;color:#0b0b0b;font-weight:800}
+.f-mtoggle b{flex:1;font-size:.92rem}
+.f-mplayer iframe{border-radius:14px;display:block}
+.f-mplayer{display:flex;flex-direction:column;gap:8px}
+.f-exn b.long{font-size:1.18rem}
