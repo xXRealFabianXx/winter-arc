@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { origin, configured } from "../_lib.js";
+import { origin, configured, env } from "../_lib.js";
 
 export default function handler(req, res) {
   if (!configured()) {
@@ -10,7 +10,7 @@ export default function handler(req, res) {
   res.setHeader("Set-Cookie", `wa_state=${state}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600`);
   const u = new URL("https://www.strava.com/oauth/authorize");
   u.search = new URLSearchParams({
-    client_id: process.env.STRAVA_CLIENT_ID,
+    client_id: env("STRAVA_CLIENT_ID"),
     response_type: "code",
     redirect_uri: origin(req) + "/api/auth/callback",
     approval_prompt: "auto",

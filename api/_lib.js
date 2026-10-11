@@ -2,10 +2,13 @@
 import crypto from "node:crypto";
 
 export const COOKIE = "wa_session";
+
+// Trim env values: copied secrets often carry stray spaces or line breaks.
+export const env = (k) => (process.env[k] || "").trim();
 const MAX_AGE = 60 * 60 * 24 * 180; // 180 days
 
 // Session cookie is encrypted (AES-256-GCM) with a key derived from the Strava client secret.
-const key = () => crypto.createHash("sha256").update("winter-arc-session:" + (process.env.STRAVA_CLIENT_SECRET || "")).digest();
+const key = () => crypto.createHash("sha256").update("winter-arc-session:" + env("STRAVA_CLIENT_SECRET")).digest();
 
 export function seal(obj) {
   const iv = crypto.randomBytes(12);
@@ -41,15 +44,15 @@ export function origin(req) {
   return "https://" + h;
 }
 
-export const configured = () => !!(process.env.STRAVA_CLIENT_ID && process.env.STRAVA_CLIENT_SECRET);
+export const configured = () => !!(env("STRAVA_CLIENT_ID") && env("STRAVA_CLIENT_SECRET"));
 
 export async function tokenRequest(params) {
   const r = await fetch("https://www.strava.com/oauth/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
-      client_id: process.env.STRAVA_CLIENT_ID,
-      client_secret: process.env.STRAVA_CLIENT_SECRET,
+      client_id: env("STRAVA_CLIENT_ID"),
+      client_secret: env("STRAVA_CLIENT_SECRET"),
       ...params,
     }),
   });

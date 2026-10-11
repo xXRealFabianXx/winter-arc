@@ -956,8 +956,10 @@ render();
 (function boot(){
   bootDb();
   try{const c=JSON.parse(localStorage.getItem("wa.cache")||"null");if(c){applyStrava(c);S.live=true;setLive("Strava · "+stampTxt(),true);render()}}catch(_){}
-  const q=new URLSearchParams(location.search).get("strava");
-  if(q){const m={ok:"Strava verbunden",abgelehnt:"Strava-Verbindung abgebrochen",rechte:"Bitte erlaube den Zugriff auf deine Aktivitäten",fehler:"Strava-Verbindung fehlgeschlagen, versuch es nochmal"}[q];if(m)toast(m);try{history.replaceState(null,"",location.pathname)}catch(_){}}
+  const qs=new URLSearchParams(location.search),q=qs.get("strava"),feld=qs.get("feld");
+  if(q){const m={ok:"Strava verbunden",abgelehnt:"Strava-Verbindung abgebrochen",rechte:"Bitte erlaube den Zugriff auf deine Aktivitäten",state:"Anmeldung abgelaufen, bitte nochmal verbinden",token:"Strava hat die Anmeldung abgelehnt",fehler:"Strava-Verbindung fehlgeschlagen, versuch es nochmal"}[q];if(m)toast(m);
+    if(q==="token")setTimeout(()=>notice("Strava hat die Anmeldung abgelehnt"+(feld?" (Feld: "+esc(feld)+")":"")+". Meist stimmt <b>STRAVA_CLIENT_SECRET</b> in Vercel nicht genau mit dem geheimen Clientschlüssel bei Strava überein. Prüfe den Wert, klicke danach auf Redeploy und verbinde neu. "+'<a class="pill btn" href="/api/auth/login" style="text-decoration:none">Nochmal verbinden</a>'),300);
+    if(q==="state")setTimeout(()=>notice(LOGIN_NOTE),300);try{history.replaceState(null,"",location.pathname)}catch(_){}}
   load();
 })();
 })();

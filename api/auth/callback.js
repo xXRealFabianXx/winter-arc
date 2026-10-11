@@ -5,7 +5,7 @@ export default async function handler(req, res) {
   const c = cookies(req);
   const clearState = "wa_state=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0";
   if (error || !code) return res.setHeader("Set-Cookie", clearState).redirect(302, "/?strava=abgelehnt");
-  if (!state || state !== c.wa_state) return res.setHeader("Set-Cookie", clearState).redirect(302, "/?strava=fehler");
+  if (!state || state !== c.wa_state) return res.setHeader("Set-Cookie", clearState).redirect(302, "/?strava=state");
   if (!String(scope || "").includes("activity:read")) return res.setHeader("Set-Cookie", clearState).redirect(302, "/?strava=rechte");
   try {
     const t = await tokenRequest({ code, grant_type: "authorization_code" });
@@ -14,7 +14,9 @@ export default async function handler(req, res) {
       clearState,
     ]);
     res.redirect(302, "/?strava=ok");
-  } catch {
-    res.setHeader("Set-Cookie", clearState).redirect(302, "/?strava=fehler");
+  } catch (e) {
+    console.error("Strava token exchange failed", JSON.stringify((e && e.detail) || String(e)));
+    const field = e && e.detail && e.detail.errors && e.detail.errors[0] && e.detail.errors[0].field;
+    res.setHeader("Set-Cookie", clearState).redirect(302, "/?strava=token" + (field ? "&feld=" + encodeURIComponent(field) : ""));
   }
 }
