@@ -13,7 +13,8 @@ const Focus = (function () {
 
   /* ---------- helpers ---------- */
   function dayFor(date) { const i = idx(date); return (R && R.allDays[i]) || { i, d: (new Date(date + "T12:00:00").getDay() + 6) % 7, date, extraEx: [], done: [], keys: [], e: {}, status: "free" }; }
-  function sessFor(date, key) { const w = Math.max(0, Math.floor(idx(date) / 7)); const day = dayFor(date); if (CAT[key] === "bike") { const s = day.keys[0] === key ? sessOf(day) : sess(key, w); return s; } return sess(key, w); }
+  function sessFor(date, key) { if (key === "free") return { key: "free", cat: "bike", title: "Freie Fahrt", detail: "", min: 0, free: true }; return sessFor0(date, key); }
+  function sessFor0(date, key) { const w = Math.max(0, Math.floor(idx(date) / 7)); const day = dayFor(date); if (CAT[key] === "bike") { const s = day.keys[0] === key ? sessOf(day) : sess(key, w); return s; } return sess(key, w); }
   function targetReps(r) { const m = String(r).match(/(\d+)\s*[–-]\s*(\d+)/); if (m) return +m[2]; const n = parseInt(r, 10); return n > 0 ? n : 8; }
   async function keepAwake() { try { if ("wakeLock" in navigator && !wake) { wake = await navigator.wakeLock.request("screen"); wake.addEventListener("release", () => { wake = null; }); } } catch (_) { wake = null; } }
   function releaseAwake() { try { if (wake) wake.release(); } catch (_) {} wake = null; }
@@ -49,9 +50,9 @@ const Focus = (function () {
     if (live && live.date === date && live.key === key) F = live;
     else {
       const s = sessFor(date, key);
-      F = { date, key, cat: CAT[key], phase: "go", started: Date.now(), i: 0, set: 0, restEnd: 0, restDur: 90, elapsed: 0, runFrom: 0 };
+      F = { date, key, cat: key === "free" ? "bike" : CAT[key], free: key === "free", laps: [], phase: "go", started: Date.now(), i: 0, set: 0, restEnd: 0, restDur: 90, elapsed: 0, runFrom: 0 };
       if (F.cat === "gym" && !(S.L[date] && S.L[date].key === key)) { logOf(date, key); saveLog(date); }
-      if (F.cat === "bike") F.segs = bikeSegments(s);
+      if (F.cat === "bike") F.segs = F.free ? [] : bikeSegments(s);
     }
     save(); open();
   }
@@ -106,6 +107,7 @@ const Focus = (function () {
       if (t) t.textContent = left > 0 ? mmss(left) : "Los!";
       if (ring) { const L2 = 2 * Math.PI * 88; ring.style.strokeDashoffset = (L2 * (1 - Math.max(0, left) / F.restDur)).toFixed(1); }
     }
+    if (F.free) { const t2 = document.getElementById("bfree"); if (t2) t2.textContent = mmss(bikeElapsed()); const lp = document.getElementById("blap"); if (lp) lp.textContent = mmss(bikeElapsed() - (F.laps.length ? F.laps[F.laps.length - 1] : 0)); return; }
     if (F.cat === "bike" && F.runFrom) {
       const e = bikeElapsed(), segs = F.segs; let t = 0, cur = segs.length - 1;
       for (let i = 0; i < segs.length; i++) { if (e < t + segs[i].d) { cur = i; break; } t += segs[i].d; }
@@ -167,7 +169,29 @@ const Focus = (function () {
       <button type="button" class="btn" data-f="back">Zurück zu den Übungen</button>
       <span class="label" style="letter-spacing:.06em">Gezählt wird das Training über Strava. Zeichnest du es nicht auf, trag es unter Heute mit „Erledigt“ ein.</span></div>`;
   }
+  function drawFree(f) {
+    const e = bikeElapsed(), s = sessFor(F.date, "free");
+    const zones = [["Z1", "Erholung", "{Z2}", 0], ["Z2", "Grundlage", "{Z2}"], ["Z3", "Tempo", "{TEMPO}"], ["SS", "Sweetspot", "{SS}"], ["Z4", "Schwelle", "{SCHW}"], ["Z5", "VO2max", "{VO2}"]].slice(1);
+    if (F.phase === "summary") {
+      f.innerHTML = head("Freie Fahrt", "Geschafft") + `<div class="f-body sum"><h2 class="xl grad-rad">Stark.</h2>
+        <div class="kpis" style="grid-template-columns:repeat(2,minmax(0,1fr))"><div class="kpi"><span class="label">Gefahren</span><span class="v num">${mmss(e)}</span></div><div class="kpi"><span class="label">Runden</span><span class="v num">${F.laps.length}</span></div></div>
+        ${F.laps.length ? `<ul class="f-sum">${F.laps.map((x, i) => `<li><span>Runde ${i + 1}</span><span class="num">${mmss(x - (i ? F.laps[i - 1] : 0))}</span></li>`).join("")}</ul>` : ""}
+        ${feedbackBlock(dayFor(F.date), { cat: "gym" })}
+        <button type="button" class="btn rad f-cta" data-f="finish">Fahrt beenden</button>
+        <span class="label" style="letter-spacing:.06em">Die Fahrt zählt automatisch als Radeinheit, sobald sie in Strava ist. War eigentlich ein Intervalltraining dran, gib unter Heute „Andere Einheit“ an, dann wird es nachgeholt.</span></div>`;
+      return;
+    }
+    f.innerHTML = head("Freie Fahrt", F.runFrom ? "Läuft" : F.phase === "go" ? "Bereit" : "Pause") + `<div class="f-body bike">
+      <div class="f-ex"><span class="label">Einfach fahren</span><h2 class="xl grad-rad">Ohne Plan</h2><span class="f-last">Keine Vorgaben. Die Zonen unten helfen bei der Orientierung.</span></div>
+      <div class="f-big num" id="bfree">${mmss(e)}</div>
+      <div class="f-total"><span class="label">Aktuelle Runde</span><span class="num" id="blap">${mmss(e - (F.laps.length ? F.laps[F.laps.length - 1] : 0))}</span></div>
+      <div class="f-adj"><button type="button" class="btn ${F.runFrom ? "" : "rad"} f-play" data-f="play">${F.runFrom ? "Pause" : F.phase === "go" ? "▶ Start" : "▶ Weiter"}</button><button type="button" class="btn" data-f="lap" ${F.runFrom ? "" : "disabled"}>Runde</button></div>
+      <div class="f-zones">${zones.map((z) => `<div><span class="label">${z[0]} · ${z[1]}</span><b class="num">${esc(fillW(z[2]))}</b></div>`).join("")}</div>
+      ${F.laps.length ? `<ul class="f-sum">${F.laps.slice().reverse().slice(0, 5).map((x, j) => { const i = F.laps.length - 1 - j; return `<li><span>Runde ${i + 1}</span><span class="num">${mmss(x - (i ? F.laps[i - 1] : 0))}</span></li>`; }).join("")}</ul>` : ""}
+      <button type="button" class="btn" data-f="end">Fahrt beenden</button></div>`;
+  }
   function drawBike(f) {
+    if (F.free) return drawFree(f);
     const s = sessFor(F.date, F.key), segs = F.segs, e = bikeElapsed(), total = segs.reduce((a, b) => a + b.d, 0);
     let t = 0, cur = segs.length - 1; for (let i = 0; i < segs.length; i++) { if (e < t + segs[i].d) { cur = i; break; } t += segs[i].d; } F.cur = cur;
     const seg = segs[cur], next = segs[cur + 1];
@@ -210,6 +234,7 @@ const Focus = (function () {
     else if (a === "next") { const { items } = list(); if (F.i + 1 < items.length) jump(F.i + 1); else { F.phase = "summary"; save(); draw(); } }
     else if (a === "back") { F.phase = "go"; save(); draw(); }
     else if (a === "play") bikeToggle();
+    else if (a === "lap") { F.laps.push(bikeElapsed()); save(); draw(); }
     else if (a === "seg-") bikeSkip(-1);
     else if (a === "seg+") bikeSkip(1);
     else if (a === "end") { F.elapsed = bikeElapsed(); F.runFrom = 0; F.phase = "summary"; save(); draw(); }

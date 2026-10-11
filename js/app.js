@@ -91,6 +91,7 @@ function vHeute() {
     }
     let a = "";
     if (isToday && k) { const ls = s.cat === "gym" ? logSess(day, s) : s; a += `<button class="btn ${s.cat === "bike" ? "rad" : "kraft"} start" type="button" data-start="${ls.key}" data-date="${day.date}">${Focus.isLive(day.date) ? "▶ Training fortsetzen" : "▶ Training starten"}</button>`; }
+    if (isToday && (!s || s.cat === "bike" || day.status === "rest")) a += `<button class="btn" type="button" data-start="free" data-date="${day.date}">Einfach fahren</button>`;
     if (isToday && day.status !== "done" && k) a += `<button class="btn" type="button" data-act="manual" data-k="${k}" ${canWrite ? "" : "disabled"}>✓ Erledigt</button>`;
     if (day.status !== "done") a += `<button class="btn" type="button" data-act="${day.e.rest ? "auto" : "rest"}" ${canWrite ? "" : "disabled"}>${day.e.rest ? "Ruhetag aufheben" : "Ruhetag"}</button>`;
     if (s && (s.test || /FTP-Test/.test(s.title))) a += `<button class="btn" type="button" data-go="tests">Testwerte eintragen</button>`;
@@ -182,7 +183,7 @@ function splitPicker(date, cur, q) {
 function logCard(day) {
   const lk = S.L[day.date] && S.L[day.date].key, w = Math.max(0, Math.floor(day.i / 7));
   return `<section class="card accent-kraft span-12"><div class="card-h"><h3>Heute Kraft trainiert?</h3><span class="label">${TI < 0 ? "Vor dem Planstart" : "Auch außerhalb des Plans"}</span></div>
-    ${splitPicker(day.date, lk || "push", "Welche Einheit?")}<div class="btns"><button class="btn kraft start" type="button" data-start="${lk && GYM[lk] ? lk : "push"}" data-date="${day.date}">${Focus.isLive(day.date) ? "▶ Training fortsetzen" : "▶ Training starten"}</button></div>${exChecklist(day, sess(lk && GYM[lk] ? lk : "push", w))}</section>`;
+    ${splitPicker(day.date, lk || "push", "Welche Einheit?")}<div class="btns"><button class="btn kraft start" type="button" data-start="${lk && GYM[lk] ? lk : "push"}" data-date="${day.date}">${Focus.isLive(day.date) ? "▶ Training fortsetzen" : "▶ Training starten"}</button><button class="btn" type="button" data-start="free" data-date="${day.date}">Oder einfach Rad fahren</button></div>${exChecklist(day, sess(lk && GYM[lk] ? lk : "push", w))}</section>`;
 }
 const HOW = [["plan", "Wie geplant"], ["kuerzer", "Kürzer"], ["locker", "Lockerer"], ["haerter", "Härter"], ["anders", "Andere Einheit"]];
 const FEEL = [["frisch", "Frisch"], ["ok", "Okay"], ["muede", "Müde"], ["platt", "Platt"]];
@@ -228,7 +229,7 @@ function vRad() {
   const next = upcoming("bike", 3);
   return {
     hero: `<span class="label">${S.bike ? esc(S.bike.name) + " · " + fN(S.bike.km) + " km" : "Dein Rad"}</span><h1 class="xl"><span class="grad-rad">Rad</span></h1><p class="sub">${S.ftp ? "FTP " + S.ftp + " W" + (wkg ? " · " + fN(wkg, 2) + " W/kg" : "") : "FTP aus Strava"} · Ziel ${fg ? fg + " W" : "+10 %"}</p>`,
-    body: `<div class="span-12 kpis">${kpi("Diese Woche", fN(W.km), " km", W.bikeN + " von 3 Ausfahrten")}${kpi("Rad-Zeit", fH(W.bikeMin), " h")}${kpi("Höhenmeter", fN(W.hm), " Hm")}${kpi("Längste", fH(W.maxRide), " h", "Ausfahrt der Woche")}</div>` +
+    body: `<section class="card accent-rad span-12 free-ride"><div><h3>Einfach fahren</h3><span class="muted" style="font-size:.88rem">Ohne Vorgaben: Stoppuhr, Runden und deine Wattzonen als Orientierung.</span></div><button class="btn rad start" type="button" data-start="free" data-date="${TODAY}">▶ Freie Fahrt starten</button></section>` + `<div class="span-12 kpis">${kpi("Diese Woche", fN(W.km), " km", W.bikeN + " von 3 Ausfahrten")}${kpi("Rad-Zeit", fH(W.bikeMin), " h")}${kpi("Höhenmeter", fN(W.hm), " Hm")}${kpi("Längste", fH(W.maxRide), " h", "Ausfahrt der Woche")}</div>` +
       `<section class="card accent-rad span-7"><div class="card-h"><h3>Nächste Ausfahrten</h3><span class="label">3 pro Woche</span></div><div class="rows">${next.length ? next.map((x) => dayRow(x)).join("") : `<p class="empty">Keine Ausfahrt mehr geplant.</p>`}</div></section>` +
       `<section class="card span-5"><div class="card-h"><h3>Wattzonen</h3><span class="label">${S.ftp ? "FTP " + S.ftp + " W" : "% FTP"}</span></div><div class="zones">${zoneRows}</div><span class="label">Sweetspot ${fillW("{SS}")}</span></section>` +
       `<section class="card span-12"><div class="card-h"><h3>Radeinheiten pro Etappe</h3><div class="legend label"><span><i style="background:var(--rad)"></i>Erledigt</span><span><i style="border:1.5px dashed var(--muted)"></i>Plan 3</span></div></div>${weekChart(R.weeks.map((x) => ({ val: x.bikeN, plan: 3 })), { step: 1, min: 3, tick: (v) => v, grad: "gRad", aria: "Radeinheiten je Etappe" })}</section>` +

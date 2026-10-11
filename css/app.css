@@ -424,3 +424,9 @@ body.focus-open{overflow:hidden}
 .f-big{font-family:var(--display);font-stretch:62%;font-weight:900;font-style:italic;font-size:clamp(5rem,26vw,9rem);line-height:.9;text-align:center}
 .f-total{display:flex;justify-content:space-between;align-items:center;font-family:var(--mono);font-size:.85rem}
 .btn.start{min-height:52px}
+
+.f-zones{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.f-zones div{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:10px 12px;display:flex;flex-direction:column;gap:2px}
+.f-zones b{font-family:var(--display);font-stretch:72%;font-weight:800;font-style:italic;font-size:1.35rem;color:var(--rad2)}
+.free-ride{flex-direction:row;align-items:center;justify-content:space-between;flex-wrap:wrap}
+@media (max-width:520px){.free-ride .btn{width:100%}}
