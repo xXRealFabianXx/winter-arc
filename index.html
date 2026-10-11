@@ -39,6 +39,9 @@ body{background-color:var(--bg);color:var(--ink);font-family:var(--body);font-si
   background-size:auto,auto,44px 44px,44px 44px;background-attachment:scroll;padding-inline:16px;padding-block:18px 64px}
 .wrap{max-width:1160px;margin:0 auto;display:flex;flex-direction:column;gap:40px;position:relative;z-index:1}
 #bikeBg{position:fixed;inset:0;z-index:0;pointer-events:none;perspective:1400px;overflow:hidden}
+#bike3d{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none;display:block}
+@media (max-width:760px){#bike3d{opacity:.45}}
+html.has3d #bikeBg{display:none}
 #bikeBg .bk{position:absolute;left:50%;top:50%;width:min(64vw,960px);aspect-ratio:1120/640;transform:translate(-50%,-50%);transform-style:preserve-3d;will-change:transform}
 #bikeBg img{position:relative;display:block;width:100%;height:auto;max-width:100%;filter:drop-shadow(0 34px 50px rgba(0,0,0,.55)) drop-shadow(0 0 46px rgba(108,72,255,.28))}
 #bikeBg .bk-glow{position:absolute;left:8%;right:8%;bottom:-6%;height:22%;border-radius:50%;background:radial-gradient(closest-side,rgba(108,72,255,.45),transparent);filter:blur(10px);transform:translateZ(-40px)}
@@ -239,6 +242,7 @@ section{display:flex;flex-direction:column;gap:16px}
 </style>
 </head>
 <body>
+<canvas id="bike3d" aria-hidden="true"></canvas>
 <div id="bikeBg" aria-hidden="true"><div class="bk" id="bk"><div class="bk-glow"></div><img src="/bike.webp?v=2" alt="" width="1120" height="640" decoding="async"></div></div>
 <div class="wrap">
   <div class="topbar">
@@ -337,27 +341,104 @@ section{display:flex;flex-direction:column;gap:16px}
 <div class="scrim" id="scrim" hidden><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" id="sheet"></div></div>
 <div class="toast" id="toast" hidden></div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
-/* Bike photo in the background: floats, sways in 3D, travels across the page while scrolling, tilts with the pointer */
+/* Bike in 3D: the photo becomes front and back of a solid body (stacked layers give it thickness),
+   plus full-width handlebar and saddle in 3D so it reads as a bike from the front too.
+   Spins continuously, travels across the page while scrolling, tilts with the pointer.
+   Without WebGL the plain photo layer stays as fallback. */
 (function(){
+"use strict";
+const IMG="/bike.webp?v=3",CORE="/bike-core.webp?v=3",IW=1120,IH=640;
+function photoFallback(){
   const el=document.getElementById("bk");if(!el)return;
   const reduce=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  let tx=0,ty=0,mx=0,my=0,boost=0,lastY=window.scrollY;
+  let tx=0,ty=0,mx=0,my=0;
   window.addEventListener("pointermove",e=>{tx=e.clientX/window.innerWidth-.5;ty=e.clientY/window.innerHeight-.5},{passive:true});
-  window.addEventListener("scroll",()=>{const y=window.scrollY;boost=Math.min(boost+Math.abs(y-lastY)*.02,8);lastY=y},{passive:true});
-  function frame(now){
-    const t=now/1000,wide=window.innerWidth>=900;
-    const docH=Math.max(1,document.documentElement.scrollHeight-window.innerHeight);
-    const sp=Math.min(Math.max(window.scrollY/docH,0),1);
-    mx+=(tx-mx)*.06;my+=(ty-my)*.06;boost*=.93;
-    const x=wide?22*Math.cos(sp*Math.PI):0;
-    const y=wide?6+Math.sin(sp*Math.PI)*-4:8;
-    const sway=reduce?0:Math.sin(t*.45)*14+boost*(Math.sin(t*3)*.6);
-    const fl=reduce?0:Math.sin(t*.9)*8;
-    el.style.transform=`translate(calc(-50% + ${x.toFixed(2)}vw), calc(-50% + ${y.toFixed(2)}vh + ${fl.toFixed(1)}px)) rotateY(${(sway+mx*16).toFixed(2)}deg) rotateX(${(-my*8).toFixed(2)}deg) rotateZ(${(mx*-1.5).toFixed(2)}deg)`;
-    requestAnimationFrame(frame);
-  }
+  (function f(now){const t=now/1000,wide=window.innerWidth>=900;const docH=Math.max(1,document.documentElement.scrollHeight-window.innerHeight);const sp=Math.min(Math.max(window.scrollY/docH,0),1);
+    mx+=(tx-mx)*.06;my+=(ty-my)*.06;const x=wide?22*Math.cos(sp*Math.PI):0,sw=reduce?0:Math.sin(t*.45)*14,fl=reduce?0:Math.sin(t*.9)*8;
+    el.style.transform=`translate(calc(-50% + ${x.toFixed(2)}vw), calc(-50% + ${fl.toFixed(1)}px)) rotateY(${(sw+mx*16).toFixed(2)}deg) rotateX(${(-my*8).toFixed(2)}deg)`;requestAnimationFrame(f)})(0);
+}
+if(!window.THREE){photoFallback();return}
+const canvas=document.getElementById("bike3d");
+let renderer;
+try{renderer=new THREE.WebGLRenderer({canvas:canvas,antialias:true,alpha:true,powerPreference:"low-power"})}catch(_){canvas.remove();photoFallback();return}
+document.documentElement.classList.add("has3d");
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.75));
+renderer.outputEncoding=THREE.sRGBEncoding;
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(28,1,.1,50);
+const pivot=new THREE.Group();scene.add(pivot);
+const bike=new THREE.Group();pivot.add(bike);
+
+/* image px -> world units (bike length ~1.7) */
+const K=1.7/IW,X=px=>(px-IW/2)*K,Y=py=>(IH/2-py)*K;
+
+let loaded=0,ready=false;
+const loadTex=u=>{const t=new THREE.TextureLoader().load(u,()=>{if(++loaded===2)ready=true});t.encoding=THREE.sRGBEncoding;t.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());return t};
+const tex=loadTex(IMG),coreTex=loadTex(CORE);
+const geo=new THREE.PlaneGeometry(IW*K,IH*K);
+/* thickness: 11 stacked layers. Outer two carry the full photo (with spokes = the two spoke flanges),
+   inner ones use a core texture without spokes and are darker = sides of tubes, rims and tyres */
+const LAYERS=11,DEPTH=.05;
+for(let i=0;i<LAYERS;i++){
+  const f=i/(LAYERS-1),outer=(i===0||i===LAYERS-1);
+  const shade=outer?1:.42+.12*Math.sin(f*Math.PI);
+  const mat=new THREE.MeshStandardMaterial({map:outer?tex:coreTex,alphaTest:.5,side:THREE.DoubleSide,roughness:outer?.38:.7,metalness:outer?.25:.1,color:new THREE.Color(shade,shade,shade)});
+  const m=new THREE.Mesh(geo,mat);m.position.z=(f-.5)*DEPTH;bike.add(m);
+}
+/* 3D handlebar, stem and saddle so the front view reads as a bike */
+const blk=new THREE.MeshStandardMaterial({color:0x07070a,roughness:.62,metalness:.15});
+function tube(pts,r){const c=new THREE.CatmullRomCurve3(pts);bike.add(new THREE.Mesh(new THREE.TubeGeometry(c,40,r,10,false),blk))}
+const V=(px,py,z)=>new THREE.Vector3(X(px),Y(py),z);
+/* cockpit (the photographed one is removed from the texture) */
+tube([V(400,104,0),V(386,98,0),V(370,95,0)],.017);
+tube([V(370,95,-.19),V(370,95,0),V(370,95,.19)],.014);
+[-1,1].forEach(sd=>{
+  const z=sd*.19,zh=sd*.2;
+  tube([V(370,95,z),V(330,92,sd*.195),V(285,87,zh),V(245,80,zh)],.014);
+  tube([V(245,80,zh),V(226,84,zh),V(222,104,zh),V(236,138,zh),V(262,170,zh),V(300,186,zh),V(342,190,zh)],.012);
+  const hoodM=new THREE.Mesh(new THREE.BoxGeometry(.06,.04,.03),blk);hoodM.position.set(X(238),Y(78),zh);hoodM.rotation.z=.15;bike.add(hoodM);
+  const lever=new THREE.Mesh(new THREE.BoxGeometry(.016,.12,.014),blk);lever.position.set(X(214),Y(140),zh);lever.rotation.z=.12;bike.add(lever);
+});
+const saddle=new THREE.Mesh(new THREE.SphereGeometry(1,24,12),blk);saddle.scale.set(.14,.02,.06);saddle.position.set(X(758),Y(34),0);bike.add(saddle);
+
+/* halo + lights */
+const haloA=new THREE.Mesh(new THREE.RingGeometry(.86,.872,128),new THREE.MeshBasicMaterial({color:0x8a5cff,transparent:true,opacity:.55,side:THREE.DoubleSide}));
+const haloB=new THREE.Mesh(new THREE.RingGeometry(.98,.984,128),new THREE.MeshBasicMaterial({color:0x5ad8ff,transparent:true,opacity:.32,side:THREE.DoubleSide}));
+const floorY=Y(IH)-.005;
+[haloA,haloB].forEach(h=>{h.rotation.x=-Math.PI/2;h.position.y=floorY;pivot.add(h)});
+const shadow=new THREE.Mesh(new THREE.CircleGeometry(.8,48),new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:.35}));
+shadow.rotation.x=-Math.PI/2;shadow.scale.set(1,.28,1);shadow.position.y=floorY+.002;pivot.add(shadow);
+scene.add(new THREE.HemisphereLight(0xffffff,0x221844,1.15));
+const key=new THREE.DirectionalLight(0xffffff,1.1);key.position.set(1.5,2,3);scene.add(key);
+const back=new THREE.DirectionalLight(0xffffff,.9);back.position.set(-1.5,1.5,-3);scene.add(back);
+const rimV=new THREE.PointLight(0x8a5cff,2.2,6);rimV.position.set(-2,1,-1);scene.add(rimV);
+const rimC=new THREE.PointLight(0x5ad8ff,1.6,6);rimC.position.set(2,1,1.5);scene.add(rimC);
+
+let W=0,H=0,wide=true;
+function resize(){W=window.innerWidth;H=window.innerHeight;wide=W>=900;renderer.setSize(W,H,false);camera.aspect=W/H;camera.updateProjectionMatrix();
+  camera.position.set(0,.32,wide?4.4:5.2);camera.lookAt(0,.02,0)}
+window.addEventListener("resize",resize);resize();
+
+const reduce=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+let angle=0,lastY=window.scrollY,boost=0,tx=0,ty=0,mx=0,my=0,last=performance.now();
+window.addEventListener("scroll",()=>{const y=window.scrollY;boost+=Math.min(Math.abs(y-lastY),200)*.003;lastY=y},{passive:true});
+window.addEventListener("pointermove",e=>{tx=e.clientX/W-.5;ty=e.clientY/H-.5},{passive:true});
+function frame(now){
+  const dt=Math.min((now-last)/1000,.05);last=now;
+  const docH=Math.max(1,document.documentElement.scrollHeight-H),sp=Math.min(Math.max(window.scrollY/docH,0),1);
+  boost*=.92;angle+=dt*(reduce?.05:.3)+(reduce?0:boost*dt*5);
+  mx+=(tx-mx)*.05;my+=(ty-my)*.05;
+  pivot.rotation.y=angle+mx*.5;pivot.rotation.x=.06+my*.1;
+  pivot.position.x=wide?(reduce?1.05:1.05*Math.cos(sp*Math.PI)):0;
+  pivot.position.y=(wide?.0:.25)+(reduce?0:Math.sin(now/1100)*.02);
+  pivot.scale.setScalar(wide?1:.85);
+  haloA.rotation.z+=dt*.2;haloB.rotation.z-=dt*.12;
+  if(ready)renderer.render(scene,camera);
   requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
 })();
 </script>
 
