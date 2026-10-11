@@ -407,6 +407,7 @@ $("main").addEventListener("click", (e) => {
   const ed = t.closest("[data-exed]"); if (ed && !ed.disabled) { editEx(ed.dataset.exed, ed.dataset.k, +ed.dataset.n, +ed.dataset.d || 0); return; }
   const kt = t.closest("[data-ktab]"); if (kt) { kraftTab = kt.dataset.ktab; render(); return; }
   const rd = t.closest("[data-round]"); if (rd) { testRound = +rd.dataset.round; render(); return; }
+  if (t.closest("[data-spcheck]")) { SPOT.st = null; SPOT.lists = null; render(); return; }
   const dsc = t.closest("[data-discard]"); if (dsc) { Focus.confirmReset(dsc, dsc.dataset.discard); return; }
   const clr = t.closest("[data-clearday]"); if (clr) { confirmClear(clr, clr.dataset.clearday); return; }
   const st = t.closest("[data-start]"); if (st) { Focus.start(st.dataset.date, st.dataset.start); return; }
@@ -622,8 +623,8 @@ async function spState() {
     const r = await fetch("/api/spotify/player", { credentials: "same-origin", cache: "no-store" });
     if (r.status === 401) SPOT.st = { mode: "login" };
     else if (r.ok) SPOT.st = Object.assign({ mode: "on" }, await r.json());
-    else SPOT.st = { mode: "off" };
-  } catch (_) { SPOT.st = SPOT.st && SPOT.st.mode === "on" ? SPOT.st : { mode: "off" }; }
+    else { const j = await r.json().catch(() => ({})); SPOT.st = Object.assign({ mode: "off", status: r.status }, j); }
+  } catch (_) { SPOT.st = SPOT.st && SPOT.st.mode === "on" ? SPOT.st : { mode: "off", status: 0 }; }
   return SPOT.st;
 }
 const SP_ERR = { no_device: "Kein aktives Gerät – öffne Spotify kurz auf dem Handy und spiel was an", premium: "Steuern geht nur mit Spotify Premium", login: "Bitte Spotify neu verbinden", not_configured: "Spotify ist noch nicht eingerichtet" };
@@ -650,7 +651,16 @@ function spotifyCard() {
   let main;
   if (mode === "on") main = `<div class="row"><span class="sp-dot on"></span><div style="flex:1"><b>Spotify verbunden</b><div class="label" style="letter-spacing:.04em">${st.track ? esc(st.track.name) + " · " + esc(st.track.artist) : "Im Training steuerst du Musik direkt unten in der Leiste."}${st.device ? " · " + esc(st.device.name) : ""}</div></div><a class="btn sm" href="/api/spotify/logout">Trennen</a></div>`;
   else if (mode === "login") main = `<div class="row"><span class="sp-dot"></span><div style="flex:1"><b>Spotify verbinden</b><div class="label" style="letter-spacing:.04em">Dann siehst du im Training, was läuft, und steuerst Play, Skip und Playlists. Braucht Spotify Premium.</div></div><a class="btn sm sp" href="/api/spotify/login">Verbinden</a></div>`;
-  else if (mode === "off") main = `<div class="label" style="letter-spacing:.04em">Direkte Spotify-Verbindung ist noch nicht eingerichtet (Spotify-App in Vercel fehlt). Bis dahin klappt der Playlist-Link.</div>`;
+  else if (mode === "off") {
+    let why;
+    if (st.error === "not_configured") {
+      why = "Vercel findet " + (st.missing && st.missing.length ? "nicht: <b>" + st.missing.map(esc).join(", ") + "</b>" : "die Spotify-Schlüssel nicht") + ".";
+      const odd = (st.seen || []).filter((k) => !/^SPOTIFY_CLIENT_(ID|SECRET)$/.test(k));
+      if (odd.length) why += " Gefunden, aber falsch geschrieben: <b>" + odd.map(esc).join(", ") + "</b>.";
+      else if (!(st.seen || []).length) why += " Meist fehlt der Redeploy, oder die Variablen gelten nicht für <b>Production</b>.";
+    } else why = st.status ? "Spotify-Server antwortet mit Fehler " + esc(String(st.status)) + "." : "Spotify-Server nicht erreichbar.";
+    main = `<div class="row"><span class="sp-dot"></span><div style="flex:1"><b>Spotify noch nicht eingerichtet</b><div class="label" style="letter-spacing:.04em;text-transform:none">${why}</div></div><button class="btn sm" type="button" data-spcheck="1">Neu prüfen</button></div>`;
+  }
   else main = `<div class="label">Spotify wird geprüft…</div>`;
   return `<section class="card span-12">${head}${main}<details class="sp-alt"${mode === "on" ? "" : " open"}><summary class="label">Alternative: Playlist-Link</summary><form class="exadd" data-music="1"><input type="text" name="u" value="${esc(musicUrl())}" placeholder="Spotify-Link deiner Playlist einfügen" aria-label="Spotify-Link"><button class="btn sm rad" type="submit">Speichern</button></form><span class="label" style="letter-spacing:.06em">In Spotify bei der Playlist auf Teilen → Link kopieren.</span></details></section>`;
 }

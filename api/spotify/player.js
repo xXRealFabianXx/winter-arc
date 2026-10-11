@@ -8,7 +8,12 @@ const API = "https://api.spotify.com/v1";
 
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
-  if (!spConfigured()) return res.status(503).json({ error: "not_configured" });
+  if (!spConfigured()) {
+    // Only variable NAMES are reported (never values) so typos / missing redeploys are easy to spot.
+    const missing = ["SPOTIFY_CLIENT_ID", "SPOTIFY_CLIENT_SECRET"].filter((k) => !(process.env[k] || "").trim());
+    const seen = Object.keys(process.env).filter((k) => /spot/i.test(k));
+    return res.status(503).json({ error: "not_configured", missing, seen, env: process.env.VERCEL_ENV || null });
+  }
   let token;
   try { token = await spAccess(req, res); } catch { return res.status(401).json({ error: "login" }); }
   if (!token) return res.status(401).json({ error: "login" });
