@@ -82,7 +82,7 @@ function vHeute() {
     if (s) {
       body += `<span class="label">${isToday ? "Geplantes Training" : "Erstes Training"}</span><div class="card-h"><span class="chip ${catCls(s.cat)}"><i></i>${catName(s.cat)} · ${s.min}′</span>${day.status === "done" ? `<span class="chip done">Erledigt</span>` : day.pinned ? `<span class="chip pin">Festgelegt</span>` : ""}</div>
         <div class="t-title ${s.cat === "bike" ? "grad-rad" : "grad-kraft"}">${esc(s.title)}</div>
-        <div class="t-detail">${esc(s.cat === "bike" ? fillW(s.detail) : s.detail + " · " + RIR(w))}</div>`;
+        <div class="t-detail">${esc(s.cat === "bike" ? fillW(s.detail) : s.test ? s.detail : s.detail + " · " + RIR(w))}</div>`;
       if (s.cat === "bike") body += `<div class="specs">${S.ftp ? `<span class="spec"><span>Z2</span>${fillW("{Z2}")}</span><span class="spec"><span>FTP</span>${S.ftp} W</span>` : `<span class="spec"><span>Zonen</span>in % FTP</span>`}<span class="spec"><span>Dauer</span>${s.min}′</span></div>`;
       if (s.ex) body += exChecklist(day, logSess(day, s));
       if (day.status === "done" || (isToday && day.done.length)) body += feedbackBlock(day, s);
@@ -248,7 +248,7 @@ function vKraft() {
   if (kraftTab === "uebungen") return { hero, body: seg + exEditor() };
   return {
     hero,
-    body: seg + `<div class="span-12 kpis">${kpi("Diese Woche", W.gymN, "/4")}${kpi("Gesamt", R.tot.gym, "/64")}${kpi("Nächste", next[0] ? esc(sess(next[0].keys[0], Math.floor(next[0].i / 7)).title) : "–", "", next[0] ? DOWL[next[0].d] + " " + dm(next[0].date) : "")}${kpi("Satzbereich", "6–8", " Wdh.")}</div>` +
+    body: seg + `<div class="span-12 kpis">${kpi("Diese Woche", W.gymN, "/4")}${kpi("Gesamt", R.tot.gym, "/64")}${kpi("Nächste", next[0] ? esc(sess(next[0].keys[0], Math.floor(next[0].i / 7)).title) : "–", "", next[0] ? DOWL[next[0].d] + " " + dm(next[0].date) : "")}${TESTW.has(cw) ? kpi("Testwoche", "6", " Wdh.", "Gewicht für 6 saubere Wdh.") : kpi("Satzbereich", "6–8", " Wdh.")}</div>` +
       splits + phaseCard +
       `<section class="card span-7"><div class="card-h"><h3>Krafteinheiten pro Etappe</h3><div class="legend label"><span><i style="background:var(--kraft)"></i>Ist</span><span><i style="border:1.5px dashed var(--muted)"></i>Plan 4</span></div></div>${weekChart(R.weeks.map((x) => ({ val: x.gymN, plan: 4 })), { step: 1, min: 4, tick: (v) => v, grad: "gKraft", aria: "Krafteinheiten je Etappe" })}</section>` +
       `<section class="card span-12"><div class="card-h"><h3>Letzte Krafteinheiten</h3></div>${recentList("gym", 6)}</section>`,
@@ -317,7 +317,7 @@ function vTests() {
   if (testRound === null) testRound = (TESTS.slice().reverse().find((t) => roundState(t) !== "next") || TESTS[0]).n;
   const fts = testFtps(), base = S.ftpBase || S.ftpStrava, latest = fts.length ? fts[fts.length - 1].ftp : null;
   const delta = latest && base ? latest - base : null, gain = strengthGain();
-  const wkg = latest && S.weight ? latest / S.weight : null;
+  const wkg = (latest || S.ftp) && S.weight ? (latest || S.ftp) / S.weight : null;
   const dates = (t) => dm(iso(t.w * 7)) + " – " + dm(iso(t.w * 7 + 6));
   const daysTo = Math.max(0, cur.w * 7 - TI);
   const timeline = `<section class="card span-12"><div class="card-h"><h3>Testplan</h3><span class="label">Alle 4 Wochen · in den Entlastungswochen</span></div>
@@ -477,7 +477,10 @@ function toggleEx(date, key, name, soft) {
   const i = c.indexOf(name); if (i >= 0) c.splice(i, 1); else c.push(name);
   if (c.length) S.C[date] = { key, ex: c }; else delete S.C[date];
   if (soft) { // keep focus while typing values: update just this row
-    document.querySelectorAll("button.ex-h[data-date='" + date + "']").forEach((b) => { if (b.dataset.ex === name) { b.setAttribute("aria-pressed", "true"); b.closest(".exlog").classList.add("on"); } });
+    let total = 0, done = 0;
+    document.querySelectorAll("button.ex-h[data-date='" + date + "']").forEach((b) => { if (b.dataset.ex === name) { b.setAttribute("aria-pressed", "true"); b.closest(".exlog").classList.add("on"); } total++; if (b.closest(".exlog").classList.contains("on")) done++; });
+    const box = document.querySelector("button.ex-h[data-date='" + date + "']"); const wrap = box && box.closest(".exlist") && box.closest(".exlist").parentElement;
+    if (wrap) { const cnt = wrap.querySelector(".card-h .label.num"); if (cnt) cnt.textContent = done + "/" + total; const bar = wrap.querySelector(".track > i"); if (bar) bar.style.width = Math.round((done / total) * 100) + "%"; }
   } else render();
   const dd = R && R.allDays[idx(date)], total = (GYM[key] ? exOf(key, Math.floor(idx(date) / 7)).length : 0) + (dd && dd.extraEx ? dd.extraEx.length : 0);
   if (i < 0 && c.length >= total) toast("Alle Übungen geschafft");
@@ -547,10 +550,14 @@ function makeDB() {
     if (!remote || flushing) return; const ops = pend(); if (!ops.length) return; flushing = true;
     try {
       const r = await fetch("/api/data", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ops }) });
-      if (r.ok) { const now = pend(); savePend(now.slice(ops.length)); S.sync = "on"; }
+      if (r.ok) {
+        const sent = new Set(ops.map((o) => o.col + "/" + o.id + "/" + JSON.stringify(o.value)));
+        savePend(pend().filter((o) => !sent.has(o.col + "/" + o.id + "/" + JSON.stringify(o.value)))); S.sync = "on";
+      }
       else if ([401, 403, 503].includes(r.status)) { remote = false; S.sync = r.status === 503 ? "nodb" : "off"; }
     } catch (_) { /* offline: stays pending */ }
     flushing = false;
+    if (remote && pend().length && S.sync === "on") setTimeout(flush, 300);
   }
   function queue(col, id, value) { const a = pend().filter((o) => !(o.col === col && o.id === id)); a.push({ col, id, value }); savePend(a); flush(); }
   return {
@@ -579,6 +586,11 @@ async function syncRemote() {
       const ops = []; COLS.forEach((c) => { const o = DB.load("wa." + c); Object.keys(o).forEach((id) => ops.push({ col: c, id, value: o[id] })); });
       const keep = DB.pend().filter((p) => !ops.some((o) => o.col === p.col && o.id === p.id)); DB.savePend(ops.concat(keep));
     } else { // database wins, unsent local edits are applied on top
+      let migrated = false; try { migrated = localStorage.getItem("wa.migrated") === "1"; } catch (_) {}
+      if (!migrated) { // this browser's entries from before the database existed: merge them in once
+        const ops = []; COLS.forEach((c) => { const o = DB.load("wa." + c), rem = D[c] || {}; Object.keys(o).forEach((id) => { if (!(id in rem)) ops.push({ col: c, id, value: o[id] }); }); });
+        const cur = DB.pend(); DB.savePend(cur.concat(ops.filter((o) => !cur.some((p) => p.col === o.col && p.id === o.id))));
+      }
       const pending = DB.pend();
       COLS.forEach((c) => {
         const o = Object.assign({}, D[c] || {});
@@ -587,6 +599,7 @@ async function syncRemote() {
       });
       loadState();
     }
+    try { localStorage.setItem("wa.migrated", "1"); } catch (_) {}
     S.sync = "on"; await DB.flush(); render();
   } catch (_) { S.sync = "local"; render(); }
 }
@@ -607,7 +620,11 @@ async function load() {
   setLive("Lädt", false);
   try {
     const r = await fetch("/api/strava", { credentials: "same-origin", cache: "no-store" });
-    if (r.status === 401) { S.live = false; notice(LOGIN_NOTE); setLive("Offline", false); return; }
+    if (r.status === 401) {
+      S.live = false; S.acts = []; S.bike = null; S.name = null; S.ftpStrava = null; recalcFtp();
+      try { localStorage.removeItem("wa.cache"); } catch (_) {}
+      DB.setRemote(false); S.sync = "local"; notice(LOGIN_NOTE); setLive("Offline", false); return;
+    }
     if (r.status === 429) { notice("Strava bremst gerade. Versuch es in 15 Minuten erneut."); setLive(S.live ? "Strava" : "Pausiert", S.live); return; }
     if (!r.ok) { notice("Strava antwortet gerade nicht. Deine letzten Daten bleiben sichtbar."); setLive(S.live ? "Strava" : "Offline", S.live); return; }
     const P = await r.json(); applyStrava(P); S.live = true;
@@ -617,6 +634,12 @@ async function load() {
   } catch (_) { setLive(S.live ? "Strava" : "Offline", S.live); }
   finally { render(); }
 }
+
+/* new day while the page stayed open: start fresh */
+function dayCheck() { if (new Date().toLocaleDateString("sv-SE") !== TODAY) location.reload(); }
+document.addEventListener("visibilitychange", () => { if (!document.hidden) dayCheck(); });
+window.addEventListener("focus", dayCheck);
+setInterval(dayCheck, 60000);
 
 /* ---------- boot ---------- */
 (function boot() {
