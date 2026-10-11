@@ -70,7 +70,8 @@ function vHeute() {
   const cw = curW(), W = R.weeks[cw], day = todayDay();
   const eyebrow = !day ? "Saison beendet" : TI < 0 ? "Start morgen · " + DOWL[0] + " " + dm(day.date) : DOWL[day.d] + " " + dm(day.date) + " · Etappe " + (cw + 1);
   let heroTitle = "Ziellinie", heroCls = "grad-done", heroSub = "16 Etappen geschafft.";
-  let card = "";
+  let card = "", extraLog = "";
+  if (TI < 0 || TI >= DAYS) extraLog = logCard(pseudoToday());
   if (day) {
     const k = day.keys[0], w = Math.floor(day.i / 7), s = sessOf(day), isToday = day.i === TI, canWrite = S.dbOK;
     if (day.status === "done") { heroTitle = "Erledigt"; heroCls = "grad-done"; heroSub = s ? s.title + " ist im Kasten." : "Stark."; }
@@ -79,11 +80,11 @@ function vHeute() {
     else { heroTitle = s.cat === "bike" ? "Rad" : "Kraft"; heroCls = s.cat === "bike" ? "grad-rad" : "grad-kraft"; heroSub = s.title + " · " + s.min + " Minuten"; }
     let body = "";
     if (s) {
-      body += `<div class="card-h"><span class="chip ${catCls(s.cat)}"><i></i>${catName(s.cat)} · ${s.min}′</span>${day.status === "done" ? `<span class="chip done">Erledigt</span>` : day.pinned ? `<span class="chip pin">Festgelegt</span>` : ""}</div>
+      body += `<span class="label">${isToday ? "Geplantes Training" : "Erstes Training"}</span><div class="card-h"><span class="chip ${catCls(s.cat)}"><i></i>${catName(s.cat)} · ${s.min}′</span>${day.status === "done" ? `<span class="chip done">Erledigt</span>` : day.pinned ? `<span class="chip pin">Festgelegt</span>` : ""}</div>
         <div class="t-title ${s.cat === "bike" ? "grad-rad" : "grad-kraft"}">${esc(s.title)}</div>
         <div class="t-detail">${esc(s.cat === "bike" ? fillW(s.detail) : s.detail + " · " + RIR(w))}</div>`;
       if (s.cat === "bike") body += `<div class="specs">${S.ftp ? `<span class="spec"><span>Z2</span>${fillW("{Z2}")}</span><span class="spec"><span>FTP</span>${S.ftp} W</span>` : `<span class="spec"><span>Zonen</span>in % FTP</span>`}<span class="spec"><span>Dauer</span>${s.min}′</span></div>`;
-      if (s.ex) body += exChecklist(day, s);
+      if (s.ex) body += exChecklist(day, logSess(day, s));
       if (day.status === "done" || (isToday && day.done.length)) body += feedbackBlock(day, s);
     } else {
       body += `<div class="t-title">${day.status === "rest" ? "Ruhetag" : "Frei"}</div><div class="t-detail">${day.status === "rest" ? "Eingetragen. Die übrigen Einheiten rücken nach." : "Keine Einheit geplant. Leg eine fest, wenn du Lust hast."}</div>`;
@@ -93,6 +94,7 @@ function vHeute() {
     if (day.status !== "done") a += `<button class="btn" type="button" data-act="${day.e.rest ? "auto" : "rest"}" ${canWrite ? "" : "disabled"}>${day.e.rest ? "Ruhetag aufheben" : "Ruhetag"}</button>`;
     if (s && (s.test || /FTP-Test/.test(s.title))) a += `<button class="btn" type="button" data-go="tests">Testwerte eintragen</button>`;
     a += `<button class="btn" type="button" data-act="sheet" data-i="${day.i}">Ändern</button>`;
+    if (day.status !== "done" && day.i >= 0) body += changeRow(day);
     card = `<section class="card today span-8 ${s ? "accent-" + catCls(s.cat) : ""}" data-date="${day.date}">${body}<div class="btns" data-actions data-date="${day.date}">${a}</div></section>`;
   }
   const quota = R.doneAll + R.lost ? Math.round((R.doneAll / (R.doneAll + R.lost)) * 100) : null;
@@ -110,7 +112,7 @@ function vHeute() {
   const adj = adjustCard(W);
   return {
     hero: `<span class="label">${esc(eyebrow)}</span><h1 class="xl"><span class="${heroCls}">${esc(heroTitle)}</span></h1><p class="sub">${esc(heroSub)}</p>`,
-    body: card + rings + adj + nextCard + chCard + `<section class="card span-12"><div class="kpis">${kpi("Level", levelOf(R.xp) + 1, "", esc(LEVELS[levelOf(R.xp)][1]))}${kpi("XP", fN(R.xp))}${kpi("Serie", R.wStreak, " Wo", R.dStreak + " Tage im Plan")}${kpi("Plan-Quote", quota === null ? "–" : quota, quota === null ? "" : " %")}</div></section>`,
+    body: extraLog + card + rings + adj + nextCard + chCard + `<section class="card span-12"><div class="kpis">${kpi("Level", levelOf(R.xp) + 1, "", esc(LEVELS[levelOf(R.xp)][1]))}${kpi("XP", fN(R.xp))}${kpi("Serie", R.wStreak, " Wo", R.dStreak + " Tage im Plan")}${kpi("Plan-Quote", quota === null ? "–" : quota, quota === null ? "" : " %")}</div></section>`,
   };
 }
 /* last logged values for an exercise and last note of the same session type, before a date */
@@ -126,17 +128,21 @@ function lastNote(key, before) {
 const logTxt = (e) => [e.kg ? fN(e.kg, 1) + " kg" : "", e.s && e.r ? e.s + "×" + e.r : e.r ? e.r + " Wdh." : ""].filter(Boolean).join(" · ");
 function exChecklist(day, s) {
   const can = day.i === TI && S.dbOK;
-  const list = s.ex.map((e) => ({ n: e.n, s: e.s, r: e.r })).concat((day.extraEx || []).map((n) => ({ n, s: 2, r: "6–8", extra: true })));
-  const on = new Set(S.C[day.date] && S.C[day.date].key === s.key ? S.C[day.date].ex : []);
   const log = (S.L[day.date] && S.L[day.date].key === s.key) ? S.L[day.date] : { ex: {} };
+  const rm = log.removed || [], addl = log.extra || [];
+  const list = s.ex.filter((e) => !rm.includes(e.n)).map((e) => ({ n: e.n, s: e.s, r: e.r }))
+    .concat((day.extraEx || []).filter((n) => !rm.includes(n)).map((n) => ({ n, s: 2, r: "6–8", extra: true })))
+    .concat(addl.filter((n) => !s.ex.some((e) => e.n === n)).map((n) => ({ n, s: s.key === "legs" ? 2 : 3, r: "6–8", added: true })));
+  const on = new Set(S.C[day.date] && S.C[day.date].key === s.key ? S.C[day.date].ex : []);
   const n = list.filter((e) => on.has(e.n)).length;
-  if (!list.length) return `<p class="empty">Keine Übungen hinterlegt. Leg sie unter Kraft → Übungen an.</p>`;
+  const addForm = can ? `<form class="exadd" data-sessadd="${day.date}" data-k="${s.key}"><input type="text" name="n" placeholder="Übung für dieses Training hinzufügen" maxlength="40" autocomplete="off" required aria-label="Übung für dieses Training hinzufügen"><button class="btn sm kraft" type="submit">Hinzufügen</button></form>` : "";
+  if (!list.length) return `<p class="empty">Keine Übungen in diesem Training.</p>` + addForm;
   const ln = lastNote(s.key, day.date);
   const items = list.map((e) => {
     const L = log.ex[e.n] || {}, prev = lastLog(e.n, day.date), done = on.has(e.n);
     const plan = s.test ? "6 Wdh. Test" : e.s + "×" + e.r;
     return `<div class="exlog${done ? " on" : ""}${e.extra ? " extra" : ""}">
-      <button type="button" class="ex-h" data-ex="${esc(e.n)}" data-date="${day.date}" data-k="${s.key}" aria-pressed="${done}" ${can ? "" : "disabled"}><span class="box">✓</span><span class="nm">${esc(e.n)}</span><span class="sx">${e.extra ? "nachholen" : esc(plan)}</span></button>
+      <button type="button" class="ex-h" data-ex="${esc(e.n)}" data-date="${day.date}" data-k="${s.key}" aria-pressed="${done}" ${can ? "" : "disabled"}><span class="box">✓</span><span class="nm">${esc(e.n)}</span><span class="sx">${e.extra ? "nachholen" : e.added ? "zusätzlich" : esc(plan)}</span></button>${can ? `<button type="button" class="ex-rm" data-exrm="${esc(e.n)}" data-date="${day.date}" data-k="${s.key}" aria-label="${esc(e.n)} aus diesem Training entfernen">✕</button>` : ""}
       ${prev ? `<span class="prev">Zuletzt ${esc(logTxt(prev))} · ${DOW[(idx(prev.date) % 7 + 7) % 7]} ${dm(prev.date)}</span>` : ""}
       ${can ? `<div class="lg"><label><span>kg</span><input type="number" inputmode="decimal" step="0.5" min="0" max="500" value="${L.kg || ""}" placeholder="${prev && prev.kg ? fN(prev.kg, 1) : "–"}" data-log="kg" data-ex="${esc(e.n)}" data-date="${day.date}" data-k="${s.key}" aria-label="${esc(e.n)} Gewicht"></label>
         <label><span>Sätze</span><input type="number" inputmode="numeric" step="1" min="1" max="10" value="${L.s || ""}" placeholder="${s.test ? 1 : e.s}" data-log="s" data-ex="${esc(e.n)}" data-date="${day.date}" data-k="${s.key}" aria-label="${esc(e.n)} Sätze"></label>
@@ -147,9 +153,28 @@ function exChecklist(day, s) {
     ${ln ? `<div class="lastnote"><span class="label">Notiz vom letzten ${esc(s.title.replace("-Test", ""))} · ${dm(ln.date)}</span><p>${esc(ln.note)}</p></div>` : ""}
     <div class="card-h"><span class="label">${can ? "Übungen eintragen" : "Übungen"}</span><span class="label num" style="color:${n === list.length ? "var(--done)" : "var(--muted)"}">${n}/${list.length}</span></div>
     <div class="track"><i style="width:${Math.round((n / list.length) * 100)}%"></i></div>
-    <div class="exlist">${items}</div>
+    <div class="exlist">${items}</div>${addForm}
     ${can ? `<label class="note"><span class="label">Notiz zum Training</span><textarea rows="2" maxlength="600" placeholder="z. B. Schulter zwickt, nächstes Mal 2,5 kg mehr" data-note="${day.date}" data-k="${s.key}">${esc(log.note || "")}</textarea></label>
-    <span class="label" style="letter-spacing:.06em">Gewicht eintragen hakt die Übung ab. Nicht abgehakte Übungen gelten als ausgelassen.</span>` : log.note ? `<div class="lastnote"><span class="label">Notiz</span><p>${esc(log.note)}</p></div>` : ""}</div>`;
+    <span class="label" style="letter-spacing:.06em">Antippen hakt ab, Gewicht eintragen auch. ✕ entfernt eine Übung nur aus diesem Training, dauerhaft änderst du sie unter Kraft → Übungen.</span>` : log.note ? `<div class="lastnote"><span class="label">Notiz</span><p>${esc(log.note)}</p></div>` : ""}</div>`;
+}
+function logSess(day, s) { const lk = S.L[day.date] && S.L[day.date].key; return lk && GYM[lk] ? sess(lk, Math.max(0, Math.floor(day.i / 7))) : s; }
+function pseudoToday() { const d = (new Date(TODAY + "T12:00:00").getDay() + 6) % 7; return { i: TI, d, date: TODAY, extraEx: [], done: [], keys: [], e: {}, status: "free" }; }
+function changeRow(day) {
+  const w = Math.floor(day.i / 7), cur = day.e.rest ? "rest" : day.keys[0], pinned = !!(day.e.pin || day.e.rest);
+  const opt = (id, label, cls) => `<button type="button" class="opt sm ${cls || ""}${cur === id ? " on" : ""}" data-change="${id}" data-date="${day.date}"><b>${label}</b></button>`;
+  return `<details class="change"${pinned ? " open" : ""}><summary><span class="fb-q">Training ändern</span><span class="label">${pinned ? "Geändert" : "Tauschen oder Ruhetag"}</span></summary>
+    <div class="fb-row">${["push", "pull", "legs", "upper"].map((k) => opt(k, GYM[k].n, "kraft")).join("")}</div>
+    <div class="fb-row">${["int", "base", "long"].map((k) => opt(k, sess(k, w).title, "rad")).join("")}</div>
+    <div class="fb-row">${opt("rest", "Ruhetag")}${pinned ? `<button type="button" class="opt sm" data-change="auto" data-date="${day.date}"><b>Zurück zum Plan</b></button>` : ""}</div>
+    <span class="label" style="letter-spacing:.06em">Der Rest der Woche wird automatisch neu verteilt. Nach Beinen plant er kein Rad.</span></details>`;
+}
+function splitPicker(date, cur, q) {
+  return `<div class="fb"><span class="fb-q">${q}</span><div class="fb-row">${["push", "pull", "legs", "upper"].map((k) => `<button type="button" class="opt sm${cur === k ? " on" : ""}" data-logkey="${k}" data-date="${date}"><b>${GYM[k].n}</b></button>`).join("")}</div></div>`;
+}
+function logCard(day) {
+  const lk = S.L[day.date] && S.L[day.date].key, w = Math.max(0, Math.floor(day.i / 7));
+  return `<section class="card accent-kraft span-12"><div class="card-h"><h3>Heute Kraft trainiert?</h3><span class="label">${TI < 0 ? "Vor dem Planstart" : "Auch außerhalb des Plans"}</span></div>
+    ${splitPicker(day.date, lk, "Welche Einheit?")}${lk && GYM[lk] ? exChecklist(day, sess(lk, w)) : `<p class="empty">Wähl die Einheit, dann kannst du Übungen abhaken, Gewichte eintragen und Übungen hinzufügen oder entfernen.</p>`}</section>`;
 }
 const HOW = [["plan", "Wie geplant"], ["kuerzer", "Kürzer"], ["locker", "Lockerer"], ["haerter", "Härter"], ["anders", "Andere Einheit"]];
 const FEEL = [["frisch", "Frisch"], ["ok", "Okay"], ["muede", "Müde"], ["platt", "Platt"]];
@@ -367,6 +392,9 @@ $("main").addEventListener("click", (e) => {
   const ed = t.closest("[data-exed]"); if (ed && !ed.disabled) { editEx(ed.dataset.exed, ed.dataset.k, +ed.dataset.n, +ed.dataset.d || 0); return; }
   const kt = t.closest("[data-ktab]"); if (kt) { kraftTab = kt.dataset.ktab; render(); return; }
   const rd = t.closest("[data-round]"); if (rd) { testRound = +rd.dataset.round; render(); return; }
+  const chg = t.closest("[data-change]"); if (chg) { const v = chg.dataset.change; writeEntry(chg.dataset.date, v === "auto" ? null : v === "rest" ? { rest: true } : { pin: v }); return; }
+  const lkb = t.closest("[data-logkey]"); if (lkb) { setLogKey(lkb.dataset.date, lkb.dataset.logkey); return; }
+  const rmb = t.closest("[data-exrm]"); if (rmb) { sessionEx(rmb.dataset.date, rmb.dataset.k, rmb.dataset.exrm, "remove"); return; }
   const fb = t.closest("[data-fb]"); if (fb) { setFeedback(fb.dataset.date, fb.dataset.fb, fb.dataset.val); return; }
   const ex = t.closest("button[data-ex]"); if (ex && !ex.disabled) { toggleEx(ex.dataset.date, ex.dataset.k, ex.dataset.ex); return; }
   const row = t.closest("[data-i]"); if (row && row.classList.contains("row")) { openSheet(+row.dataset.i); return; }
@@ -383,6 +411,7 @@ $("main").addEventListener("click", (e) => {
 });
 $("main").addEventListener("submit", (e) => {
   const f = e.target; e.preventDefault();
+  if (f.dataset.sessadd) { sessionEx(f.dataset.sessadd, f.dataset.k, f.elements.n.value, "add"); return; }
   if (f.classList.contains("exadd")) { addEx(f.dataset.k, f.elements.n.value); return; }
   if (f.dataset.tform === "ftp") { const v = +f.elements.v.value; setTest("ftp", +f.dataset.n, null, v > 0 ? v : null); toast(v > 0 ? "FTP " + ftpFrom20(v) + " W gespeichert" : "FTP-Wert gelöscht"); }
 });
@@ -464,7 +493,7 @@ function setFeedback(date, field, val) {
   const W = R.weeks[Math.floor(idx(date) / 7)];
   toast(W && (W.notes.length || W.suggestRest) ? "Gespeichert · Plan angepasst" : "Rückmeldung gespeichert");
 }
-function logOf(date, key) { const L = S.L[date] && S.L[date].key === key ? S.L[date] : { key, ex: {}, note: "" }; S.L[date] = L; return L; }
+function logOf(date, key) { const L = S.L[date] && S.L[date].key === key ? S.L[date] : { key, ex: {}, note: "", extra: [], removed: [] }; S.L[date] = L; return L; }
 function saveLog(date) { if (!DB) return; DB.doc("logs/" + date).set(S.L[date]).catch(() => {}); }
 function setLog(date, key, name, field, raw) {
   if (!DB) return;
@@ -475,6 +504,29 @@ function setLog(date, key, name, field, raw) {
   const c = S.C[date] && S.C[date].key === key ? S.C[date].ex : [];
   if (v > 0 && !c.includes(name)) { toggleEx(date, key, name, true); return; }
   toast("Gespeichert");
+}
+function setLogKey(date, key) {
+  if (!DB) return;
+  const L = S.L[date];
+  if (L && L.key === key) return;
+  if (L && (Object.keys(L.ex || {}).length || L.note) && !confirmSwitch(date)) return;
+  S.L[date] = { key, ex: {}, note: "", extra: [], removed: [] }; saveLog(date);
+  if (S.C[date] && S.C[date].key !== key) { delete S.C[date]; DB.doc("checks/" + date).delete().catch(() => {}); }
+  render(); toast(GYM[key].n + " ausgewählt");
+}
+let switchArm = null;
+function confirmSwitch(date) { if (switchArm === date) { switchArm = null; return true; } switchArm = date; toast("Nochmal tippen: Einträge dieses Trainings werden ersetzt"); setTimeout(() => { if (switchArm === date) switchArm = null; }, 4000); return false; }
+function sessionEx(date, key, name, act) {
+  if (!DB) return; name = String(name || "").trim(); if (!name) return;
+  const L = logOf(date, key); L.extra = L.extra || []; L.removed = L.removed || [];
+  if (act === "add") { L.removed = L.removed.filter((n) => n !== name); if (!L.extra.includes(name)) L.extra.push(name); toast(name + " zu diesem Training hinzugefügt"); }
+  else {
+    if (L.extra.includes(name)) L.extra = L.extra.filter((n) => n !== name); else if (!L.removed.includes(name)) L.removed.push(name);
+    if (L.ex && L.ex[name]) delete L.ex[name];
+    const c = S.C[date]; if (c && c.key === key && c.ex.includes(name)) { c.ex = c.ex.filter((n) => n !== name); DB.doc("checks/" + date).set(c).catch(() => {}); }
+    toast(name + " aus diesem Training entfernt");
+  }
+  saveLog(date); render();
 }
 function setNote(date, key, txt) { if (!DB) return; const L = logOf(date, key); L.note = String(txt || "").trim(); saveLog(date); toast(L.note ? "Notiz gespeichert" : "Notiz gelöscht"); }
 function saveCfg(key, val) { if (!DB) return; const ref = DB.doc("cfg/" + key); (val ? ref.set(val) : ref.delete()).catch(() => {}); }

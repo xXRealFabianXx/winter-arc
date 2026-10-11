@@ -349,3 +349,18 @@ textarea:focus{outline:2px solid var(--kraft2);outline-offset:1px}
 .lastnote p{margin:4px 0 0;font-size:.92rem}
 .split li .li-n{display:flex;flex-direction:column;min-width:0}
 .split li .li-n small{font-family:var(--mono);font-size:.68rem;color:var(--kraft2)}
+
+.exlog{position:relative}
+.ex-h{padding-right:34px}
+.ex-rm{position:absolute;top:10px;right:10px;width:30px;height:30px;border-radius:9px;border:1px solid var(--line);color:var(--muted);font-size:.8rem;display:grid;place-items:center}
+.ex-rm:hover{color:var(--bad);border-color:var(--bad)}
+
+.change{border-top:1px dashed var(--line-hi);padding-top:12px}
+.change summary{display:flex;justify-content:space-between;align-items:center;gap:10px;cursor:pointer;list-style:none;min-height:36px}
+.change summary::-webkit-details-marker{display:none}
+.change summary::after{content:"＋";color:var(--muted);font-size:1rem}
+.change[open] summary::after{content:"−"}
+.change[open]{display:flex;flex-direction:column;gap:8px}
+.opt.sm.kraft b::before,.opt.sm.rad b::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;vertical-align:1px}
+.opt.sm.kraft b::before{background:var(--kraft)} .opt.sm.rad b::before{background:var(--rad)}
+.change .fb-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}

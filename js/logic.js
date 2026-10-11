@@ -138,7 +138,8 @@ function planWeek(w,prevLegs,byDate){
     if(fb.feel==="platt"&&x.i>=TI-1)suggestRest=x.i+1;
     x.done.forEach(o=>{
       if(CAT[o.k]!=="gym")return;const c=S.C[x.date];if(!c||c.key!==o.k)return;
-      const list=exOf(o.k,w).concat((x.extraEx||[]).map(n=>({n}))),sk=list.filter(e=>!c.ex.includes(e.n)).map(e=>e.n);
+      const lg=S.L[x.date],rm=lg&&lg.key===o.k?lg.removed||[]:[];
+      const list=exOf(o.k,w).filter(e=>!rm.includes(e.n)).concat((x.extraEx||[]).map(n=>({n}))),sk=list.filter(e=>!c.ex.includes(e.n)).map(e=>e.n);
       o.skipped=sk;o.partial=sk.length*2>list.length;
       if(o.k==="legs")legsSkipped.push(...sk);else makeup.push(...sk.filter(n=>!makeup.includes(n)));
     });
