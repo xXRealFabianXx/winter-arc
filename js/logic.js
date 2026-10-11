@@ -189,7 +189,8 @@ function planWeek(w,prevLegs,byDate){
   if(makeup.length){const t=days.find(x=>!x.locked&&["upper","push","pull"].includes(x.keys[0]));if(t){const have=exOf(t.keys[0],w).map(e=>e.n);t.extraEx=makeup.filter(n=>!have.includes(n));if(t.extraEx.length)notes.push(t.extraEx.length+" ausgelassene Übung"+(t.extraEx.length>1?"en":"")+" am "+DOW[t.d]+" nachholen")}}
   if(legsSkipped.length)notes.push("Beine: "+legsSkipped.join(", ")+" ausgelassen, beim nächsten Beintag zuerst machen");
   let rest=null;if(suggestRest!==null){const t=days.find(x=>x.i===suggestRest&&!x.locked&&!x.e.rest&&x.keys.length);if(t)rest=t.date}
-  return {w:w,days:days,dropped:dropped,moves:moves,notes:notes,suggestRest:rest,doneN:7-pool.size,lastLegs:days[6].keys.includes("legs")};
+  const doneN=days.reduce((t,x)=>t+(x.locked?x.done.length:0),0);
+  return {w:w,days:days,dropped:dropped,moves:moves,notes:notes,suggestRest:rest,doneN:doneN,lastLegs:days[6].keys.includes("legs")};
 }
 
 /* ================= Gamification ================= */
