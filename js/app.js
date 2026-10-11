@@ -236,7 +236,8 @@ function vErfolge() {
   const got = R.badges.filter((b) => b.got).length, won = R.weeks.filter((w) => w.ch.won).length;
   const fg = ftpGoal();
   const account = S.live
-    ? `<div class="card-h"><span style="display:flex;gap:8px;align-items:center"><span class="led on"></span>Strava verbunden${S.name ? " als " + esc(S.name) : ""}</span><span class="label">Stand ${stampTxt()}</span></div><div class="btns"><button class="btn" type="button" data-act="refresh">Aktualisieren</button><a class="btn" href="/api/auth/logout">Strava trennen</a></div>`
+    ? `<div class="card-h"><span style="display:flex;gap:8px;align-items:center"><span class="led on"></span>Strava verbunden${S.name ? " als " + esc(S.name) : ""}</span><span class="label">Stand ${stampTxt()}</span></div>
+       <div class="card-h"><span style="display:flex;gap:8px;align-items:center"><span class="led${S.sync === "on" ? " on" : ""}"></span>${S.sync === "on" ? "Einträge werden auf allen Geräten synchronisiert" : S.sync === "nodb" ? "Datenbank fehlt noch: Einträge nur in diesem Browser" : "Einträge gerade nur in diesem Browser"}</span></div><div class="btns"><button class="btn" type="button" data-act="refresh">Aktualisieren</button><a class="btn" href="/api/auth/logout">Strava trennen</a></div>`
     : `<div class="card-h"><span style="display:flex;gap:8px;align-items:center"><span class="led"></span>Strava nicht verbunden</span></div><div class="btns"><a class="btn rad" href="/api/auth/login">Mit Strava verbinden</a></div>`;
   const base = S.acts.filter((a) => a.date >= "2026-09-14" && a.date <= "2026-10-11"), bk = base.filter((a) => a.cat === "bike");
   return {
@@ -308,7 +309,7 @@ function vTests() {
   // selected round inputs
   const t = TESTS.find((x) => x.n === testRound), st = roundState(t), open = st !== "next" && S.dbOK;
   const p20 = (S.T.ftp || {})[t.n] || "";
-  const ftpCard = `<section class="card accent-rad span-6"><div class="card-h"><h3>FTP-Test · Test ${t.n}</h3><span class="label">20 Minuten</span></div>
+  const ftpCard = `<section class="card accent-rad span-6"><div class="card-h"><h3>FTP-Test · Test ${t.n}</h3><span class="label">Zwift · 20 Minuten</span></div>
     ${ftpChart}
     <form class="tform" data-tform="ftp" data-n="${t.n}"><label for="p20-${t.n}" class="label">20′-Durchschnitt in Watt</label>
       <div class="tin"><input id="p20-${t.n}" name="v" type="number" inputmode="numeric" min="50" max="600" step="1" value="${p20}" placeholder="z. B. 220" ${open ? "" : "disabled"}><span class="tout">FTP <b class="num">${p20 ? ftpFrom20(+p20) + " W" : "–"}</b></span><button class="btn sm rad" type="submit" ${open ? "" : "disabled"}>Speichern</button></div></form>
@@ -322,7 +323,7 @@ function vTests() {
     <p class="empty" style="color:var(--ink2)">Pro Übung aufwärmen und das Gewicht eintragen, mit dem du genau 6 saubere Wiederholungen schaffst. Die Prozentzahl zeigt die Veränderung zum vorherigen Test.</p>${groups}
     <span class="label" style="letter-spacing:.06em">${open ? "Wird beim Verlassen des Feldes gespeichert." : "Eintragen ab " + dm(iso(t.w * 7)) + "."}</span></section>`;
   return {
-    hero: `<span class="label">${roundState(cur) === "now" ? "Testwoche · jetzt" : "Nächster Test in " + daysTo + " Tagen · Etappe " + (cur.w + 1)}</span><h1 class="xl"><span class="grad-violet">Tests</span></h1><p class="sub">FTP-Test über 20 Minuten und Krafttest mit 6 Wiederholungen, alle 4 Wochen.</p>`,
+    hero: `<span class="label">${roundState(cur) === "now" ? "Testwoche · jetzt" : "Nächster Test in " + daysTo + " Tagen · Etappe " + (cur.w + 1)}</span><h1 class="xl"><span class="grad-violet">Tests</span></h1><p class="sub">FTP-Test über 20 Minuten auf Zwift und Krafttest mit 6 Wiederholungen, alle 4 Wochen.</p>`,
     body: `<div class="span-12 kpis">${kpi("FTP", latest || base || "–", latest || base ? " W" : "", latest ? "aus Test " + fts[fts.length - 1].n : "Startwert aus Strava")}${kpi("Seit Start", delta === null ? "–" : (delta >= 0 ? "+" : "") + delta, delta === null ? "" : " W", base ? "Start " + base + " W" : "")}${kpi("W/kg", wkg ? fN(wkg, 2) : "–")}${kpi("Kraft", gain ? (gain >= 0 ? "+" : "") + fN(gain * 100, 1) : "–", gain ? " %" : "", "Ø Steigerung im 6-Wdh.-Test")}</div>` +
       timeline + ftpCard + kraftCard,
   };
@@ -483,11 +484,59 @@ function setTest(kind, n, name, val) {
   saveCfg("tests", S.T); recalcFtp(); render();
 }
 function recalcFtp() { const f = testFtps(); S.ftp = f.length ? f[f.length - 1].ftp : S.ftpStrava || null; }
-function bootDb() {
-  const L = localDB(); DB = L; S.dbOK = true; S.E = L.load("wa.entries"); S.F = L.load("wa.fb"); S.L = L.load("wa.logs");
+/* storage: browser first (instant, offline), synced to the personal database when signed in */
+const COLS = ["entries", "checks", "fb", "logs", "cfg"];
+function makeDB() {
+  const L = localDB(), PK = "wa.pending";
+  const pend = () => { try { return JSON.parse(localStorage.getItem(PK) || "[]") || []; } catch (_) { return []; } };
+  const savePend = (a) => { try { localStorage.setItem(PK, JSON.stringify(a.slice(-500))); } catch (_) {} };
+  let remote = false, flushing = false;
+  async function flush() {
+    if (!remote || flushing) return; const ops = pend(); if (!ops.length) return; flushing = true;
+    try {
+      const r = await fetch("/api/data", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ops }) });
+      if (r.ok) { const now = pend(); savePend(now.slice(ops.length)); S.sync = "on"; }
+      else if ([401, 403, 503].includes(r.status)) { remote = false; S.sync = r.status === 503 ? "nodb" : "off"; }
+    } catch (_) { /* offline: stays pending */ }
+    flushing = false;
+  }
+  function queue(col, id, value) { const a = pend().filter((o) => !(o.col === col && o.id === id)); a.push({ col, id, value }); savePend(a); flush(); }
+  return {
+    load: L.load, pend, savePend, flush,
+    setRemote(b) { remote = b; },
+    doc(p) { const [col, id] = p.split("/"), l = L.doc(p); return { async set(v) { await l.set(v); queue(col, id, v); }, async delete() { await l.delete(); queue(col, id, null); } }; },
+  };
+}
+function loadState() {
+  const L = DB;
+  S.E = L.load("wa.entries"); S.F = L.load("wa.fb"); S.L = L.load("wa.logs");
   const cfg = L.load("wa.cfg"); EXC = cfg.ex && typeof cfg.ex === "object" ? cfg.ex : null;
-  if (cfg.tests && typeof cfg.tests === "object") S.T = { ftp: cfg.tests.ftp || {}, kraft: cfg.tests.kraft || {} };
+  S.T = cfg.tests && typeof cfg.tests === "object" ? { ftp: cfg.tests.ftp || {}, kraft: cfg.tests.kraft || {} } : { ftp: {}, kraft: {} };
+  if (cfg.base && cfg.base.ftp) S.ftpBase = cfg.base.ftp;
   const C = L.load("wa.checks"), CC = {}; Object.keys(C).forEach((k) => { const v = C[k]; if (v && Array.isArray(v.ex)) CC[k] = { key: v.key, ex: v.ex.slice() }; }); S.C = CC;
+  recalcFtp();
+}
+function bootDb() { DB = makeDB(); S.dbOK = true; S.sync = "local"; loadState(); }
+async function syncRemote() {
+  try {
+    const r = await fetch("/api/data", { credentials: "same-origin", cache: "no-store" });
+    if (!r.ok) { S.sync = r.status === 503 ? "nodb" : "local"; render(); return; }
+    const D = await r.json(); DB.setRemote(true);
+    const empty = COLS.every((c) => !D[c] || !Object.keys(D[c]).length);
+    if (empty) { // first connection: upload everything from this browser
+      const ops = []; COLS.forEach((c) => { const o = DB.load("wa." + c); Object.keys(o).forEach((id) => ops.push({ col: c, id, value: o[id] })); });
+      const keep = DB.pend().filter((p) => !ops.some((o) => o.col === p.col && o.id === p.id)); DB.savePend(ops.concat(keep));
+    } else { // database wins, unsent local edits are applied on top
+      const pending = DB.pend();
+      COLS.forEach((c) => {
+        const o = Object.assign({}, D[c] || {});
+        pending.filter((p) => p.col === c).forEach((p) => { if (p.value === null || p.value === undefined) delete o[p.id]; else o[p.id] = p.value; });
+        try { localStorage.setItem("wa." + c, JSON.stringify(o)); } catch (_) {}
+      });
+      loadState();
+    }
+    S.sync = "on"; await DB.flush(); render();
+  } catch (_) { S.sync = "local"; render(); }
 }
 
 /* ---------- Strava ---------- */
@@ -495,8 +544,9 @@ const LOGIN_NOTE = 'Verbinde einmal dein Strava-Konto, dann füllen sich Ringe, 
 function applyStrava(P) {
   S.acts = (P.activities || []).map(norm); S.stamp = P.fetchedAt || Date.now();
   const A = P.athlete || {}; S.name = A.first_name || null; S.weight = A.weight || null; S.ftpStrava = A.ftp || null;
-  let base = null; try { base = +localStorage.getItem("wa.ftpBase") || null; } catch (_) {}
-  if (!base && S.ftpStrava) { base = S.ftpStrava; try { localStorage.setItem("wa.ftpBase", String(S.ftpStrava)); } catch (_) {} }
+  let base = S.ftpBase || null; if (!base) { try { base = +localStorage.getItem("wa.ftpBase") || null; } catch (_) {} }
+  if (!base && S.ftpStrava) base = S.ftpStrava;
+  if (base && !(DB && DB.load("wa.cfg").base)) saveCfg("base", { ftp: base });
   S.ftpBase = base; recalcFtp();
   const bikes = A.bikes || [], b = bikes.find((x) => x.primary && !x.retired) || bikes.find((x) => !x.retired);
   if (b) S.bike = { name: b.name, km: b.km };
@@ -511,6 +561,7 @@ async function load() {
     const P = await r.json(); applyStrava(P); S.live = true;
     try { localStorage.setItem("wa.cache", JSON.stringify(P)); } catch (_) {}
     notice(null); setLive("Strava", true);
+    syncRemote();
   } catch (_) { setLive(S.live ? "Strava" : "Offline", S.live); }
   finally { render(); }
 }

@@ -23,19 +23,19 @@ const B=[
  [["Sweetspot 3×10′","3 × 10′ @ {SS}, 5′ locker dazwischen. Rest Z2 @ {Z2}.",75],["Grundlage","Gleichmäßig Z2 @ {Z2}, Kadenz 85–95.",90],["Lange Ausfahrt","Z2 @ {Z2}, Anstiege nicht über {TEMPO}.",150]],
  [["Sweetspot 3×12′","3 × 12′ @ {SS}, 5′ locker.",75],["Grundlage","Z2 @ {Z2}.",90],["Lange Ausfahrt","Z2 @ {Z2}, letzte 20′ @ {TEMPO}.",165]],
  [["Sweetspot 3×15′","3 × 15′ @ {SS}, 5′ locker.",90],["Grundlage + Kadenz","Z2 @ {Z2}, 5 × 1′ Kadenz 110+.",100],["Lange Ausfahrt","Z2 @ {Z2}. Alle 45′ essen.",180]],
- [["Locker + Sprints","Z2 @ {Z2}, 4 × 15″ Sprint, voll erholen.",60],["FTP-Test","15′ einfahren, 5′ all-out, 10′ locker, dann 20′ so hart wie gleichmäßig möglich. Den 20′-Schnitt unter Tests eintragen.",75],["Ausfahrt locker","Z1–Z2, Gruppe genießen.",120]],
+ [["Locker + Sprints","Z2 @ {Z2}, 4 × 15″ Sprint, voll erholen.",60],["FTP-Test","Auf Zwift: Workout „FTP Test“ (20 Minuten) fahren. Den 20′-Schnitt danach unter Tests eintragen.",75],["Ausfahrt locker","Z1–Z2, Gruppe genießen.",120]],
  [["Sweetspot 2×20′","2 × 20′ @ {SS}, 8′ locker.",90],["Grundlage","Z2 @ {Z2}.",90],["Lang + Tempo","Z2 @ {Z2}, darin 2 × 15′ @ {TEMPO}.",180]],
  [["Schwelle 3×10′","3 × 10′ @ {SCHW}, 5′ locker.",90],["Grundlage","Z2 @ {Z2}.",100],["Lange Ausfahrt","Z2 @ {Z2}.",195]],
  [["Schwelle 3×12′","3 × 12′ @ {SCHW}, 5′ locker.",90],["Grundlage + Tempo","Z2 @ {Z2}, 20′ @ {TEMPO} am Ende.",100],["Lange Ausfahrt","Z2 @ {Z2}, längste bisher.",210]],
- [["Locker","Z2 @ {Z2}.",60],["Openers","Z2 @ {Z2}, 3 × 1′ @ {VO2}. Früh schlafen.",60],["FTP-Test","15′ einfahren, 5′ all-out, 10′ locker, dann 20′ so hart wie gleichmäßig möglich. Den 20′-Schnitt unter Tests eintragen.",75]],
+ [["Locker","Z2 @ {Z2}.",60],["Openers","Z2 @ {Z2}, 3 × 1′ @ {VO2}. Früh schlafen.",60],["FTP-Test","Auf Zwift: Workout „FTP Test“ (20 Minuten) fahren. Den 20′-Schnitt danach unter Tests eintragen.",75]],
  [["VO2max 5×3′","5 × 3′ @ {VO2}, 3′ locker.",75],["Grundlage","Z2 @ {Z2}.",100],["Lang + Schwelle","Z2 @ {Z2}, darin 3 × 10′ @ {SCHW}.",210]],
  [["VO2max 5×4′","5 × 4′ @ {VO2}, 4′ locker.",80],["Schwelle 2×15′","2 × 15′ @ {SCHW}, 5′ locker.",90],["Lange Ausfahrt","Z2 @ {Z2}.",210]],
  [["Sweetspot 3×15′","3 × 15′ @ {SS}.",90],["Grundlage lang","Z2 @ {Z2}. Feiertage nutzen.",120],["Weihnachts-Kilometer","Z2 @ {Z2}: 4 h draußen oder 2:30 h indoor.",240]],
- [["Locker","Z2 @ {Z2}.",60],["FTP-Test","15′ einfahren, 5′ all-out, 10′ locker, dann 20′ so hart wie gleichmäßig möglich. Den 20′-Schnitt unter Tests eintragen.",75],["Tag 90: Neujahrsrunde","Locker in der Gruppe, Z1–Z2. Winter Arc geschafft.",120]],
+ [["Locker","Z2 @ {Z2}.",60],["FTP-Test","Auf Zwift: Workout „FTP Test“ (20 Minuten) fahren. Den 20′-Schnitt danach unter Tests eintragen.",75],["Tag 90: Neujahrsrunde","Locker in der Gruppe, Z1–Z2. Winter Arc geschafft.",120]],
  [["VO2max 4×5′","4 × 5′ @ {VO2}, 5′ locker.",85],["Schwelle 2×20′","2 × 20′ @ {SCHW}, 8′ locker.",100],["Lang + Schwelle","Z2 @ {Z2}, darin 3 × 12′ @ {SCHW}.",210]],
  [["VO2 + Sweetspot","6 × 3′ @ {VO2}, danach 15′ @ {SS}.",90],["Grundlage","Z2 @ {Z2}.",100],["Lange Ausfahrt","Z2 @ {Z2}, längste des Winters.",225]],
  [["Schwelle 2×20′","2 × 20′ @ {SCHW}.",90],["Grundlage","Z2 @ {Z2}.",90],["Lang + Sweetspot","Z2 @ {Z2}, darin 4 × 10′ @ {SS}.",210]],
- [["Openers","Z2 @ {Z2}, 3 × 3′ @ {SCHW}.",60],["Locker + Openers","Z2 @ {Z2}, 3 × 1′ @ {VO2}.",60],["Finaler FTP-Test","Wie in Etappe 4, 8 und 12. Ziel: {GOAL}. Den 20′-Schnitt unter Tests eintragen.",75]]
+ [["Openers","Z2 @ {Z2}, 3 × 3′ @ {SCHW}.",60],["Locker + Openers","Z2 @ {Z2}, 3 × 1′ @ {VO2}.",60],["Finaler FTP-Test","Auf Zwift wie in Etappe 4, 8 und 12. Ziel: {GOAL}. Den 20′-Schnitt danach unter Tests eintragen.",75]]
 ];
 const PUSH=["Schrägbankdrücken","Flys","Trizeps","Seitheben"];
 const PULL=["Latzug","Rudern","Rudern breit","Bizeps · Übung 1","Bizeps · Übung 2"];
