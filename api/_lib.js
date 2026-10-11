@@ -39,9 +39,12 @@ export function cookies(req) {
 
 export const sessionCookie = (obj) => `${COOKIE}=${seal(obj)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${MAX_AGE}`;
 
-export function origin(req) {
-  const h = req.headers["x-forwarded-host"] || req.headers.host;
-  return "https://" + h;
+// One fixed address for the Strava callback, so it always matches the
+// "Authorization Callback Domain" in the Strava app settings.
+export const HOST = env("PUBLIC_HOST") || "winter-arc-ten-kohl.vercel.app";
+export const reqHost = (req) => String(req.headers["x-forwarded-host"] || req.headers.host || "").split(",")[0].trim();
+export function origin() {
+  return "https://" + HOST;
 }
 
 export const configured = () => !!(env("STRAVA_CLIENT_ID") && env("STRAVA_CLIENT_SECRET"));
