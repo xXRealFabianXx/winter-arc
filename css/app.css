@@ -589,3 +589,26 @@ body.focus-open{overflow:hidden}
 .route-mini{width:30px;height:30px;flex:none;border-radius:8px;background:var(--card-hi);border:1px solid var(--line)}
 @media (max-width:480px){.ride-stats b{font-size:1rem}.ride-stats small{font-size:.6rem;letter-spacing:.03em}.ride-stats span{padding:9px 8px}}
 @media (min-width:900px){.ride-card .ride{display:grid;grid-template-columns:1.3fr 1fr;align-items:center;gap:22px}.ride-card .ride-info{gap:18px}.ride-card .ride-meta{flex-direction:column;gap:6px}.ride-card .ride-meta b{font-size:1.4rem;white-space:normal}.ride-card .ride-stats{grid-template-columns:repeat(3,minmax(0,1fr))}}
+/* Garmin recovery + trends */
+.g-msg{display:flex;align-items:center;gap:10px;margin:2px 0 14px;font-size:.95rem;color:var(--ink2)}
+.g-msg i{width:10px;height:10px;border-radius:50%;flex:none;background:var(--muted)}
+.g-msg.ok i{background:var(--done);box-shadow:0 0 10px color-mix(in srgb,var(--done) 60%,transparent)}
+.g-msg.warn i{background:var(--rad2);box-shadow:0 0 10px color-mix(in srgb,var(--rad2) 60%,transparent)}
+.g-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px}
+.g-tile{display:flex;flex-direction:column;gap:4px;padding:12px;border-radius:16px;background:var(--card-hi);border:1px solid var(--line);min-width:0}
+.g-tile b{font-size:1.45rem;font-weight:700;letter-spacing:-.02em;line-height:1.05}
+.g-tile b small{font-size:.72rem;font-weight:500;color:var(--muted);margin-left:2px;letter-spacing:0}
+.g-tile .g-sub{font-size:.72rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.g-tile.warn{border-color:color-mix(in srgb,var(--rad2) 55%,transparent)}
+.g-tile.warn .g-sub{color:var(--rad2)}
+.g-tile.vo2 b{background:linear-gradient(90deg,var(--violet),var(--kraft2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.g-charts{display:grid;grid-template-columns:1fr;gap:18px}
+@media (min-width:900px){.g-charts{grid-template-columns:1fr 1fr}}
+.lc{position:relative;touch-action:pan-y}
+.lc svg{display:block;width:100%;height:auto;overflow:visible}
+.lc-read{display:flex;align-items:baseline;gap:8px;margin:4px 0 2px}
+.lc-read b{font-size:1.5rem;font-weight:700;letter-spacing:-.02em}
+.lc-read span{font-size:.8rem;color:var(--muted)}
+.lc-grid{stroke:var(--line);stroke-width:1}
+.lc-ax{font:10px var(--mono);fill:var(--muted)}
+.lc-x{stroke:var(--line-hi);stroke-width:1;stroke-dasharray:3 3}

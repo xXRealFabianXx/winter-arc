@@ -57,6 +57,78 @@ function weekChart(series, opts) {
   const defs = `<defs><linearGradient id="gRad" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="var(--rad)"/><stop offset="1" stop-color="var(--rad2)"/></linearGradient><linearGradient id="gKraft" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="var(--kraft)"/><stop offset="1" stop-color="var(--kraft2)"/></linearGradient><linearGradient id="gAll" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="var(--violet)"/><stop offset="1" stop-color="var(--done)"/></linearGradient></defs>`;
   return `<div class="chart"><svg viewBox="0 0 ${Wd} ${H}" role="img" aria-label="${esc(opts.aria)}">${defs}${g}</svg></div>`;
 }
+/* ---------- Garmin wellness via intervals.icu ---------- */
+const GW = { st: null, days: [] };
+try { const c = JSON.parse(localStorage.getItem("wa.garmin") || "null"); if (c && Array.isArray(c.days)) { GW.days = c.days; GW.st = { mode: "on", fetchedAt: c.fetchedAt }; } } catch (_) {}
+async function loadGarmin() {
+  try {
+    const r = await fetch("/api/wellness", { credentials: "same-origin", cache: "no-store" });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok) { GW.days = j.days || []; GW.st = { mode: "on", fetchedAt: j.fetchedAt }; try { localStorage.setItem("wa.garmin", JSON.stringify(j)); } catch (_) {} }
+    else if (!GW.days.length) GW.st = { mode: r.status === 503 ? "setup" : r.status === 401 || r.status === 403 ? "login" : "error", error: j.error };
+    else GW.st = Object.assign({}, GW.st, { stale: j.error || true });
+  } catch (_) { if (!GW.st) GW.st = { mode: "error" }; }
+  render();
+}
+const gLast = (f) => { for (let i = GW.days.length - 1; i >= 0; i--) { const v = GW.days[i][f]; if (v !== null && v !== undefined) return { v, date: GW.days[i].date, i }; } return null; };
+const gBase = (f, uptoI, n) => { const xs = GW.days.slice(Math.max(0, uptoI - n), uptoI).map((d) => d[f]).filter((v) => typeof v === "number"); return xs.length >= 3 ? xs.reduce((a, b) => a + b, 0) / xs.length : null; };
+function gTile(label, val, unit, sub, cls) { return `<div class="g-tile${cls ? " " + cls : ""}"><span class="label">${label}</span><b class="num">${val}<small>${unit}</small></b><span class="g-sub">${sub || "&nbsp;"}</span></div>`; }
+function recoveryCard() {
+  if (!GW.days.length) return "";
+  const vo2 = gLast("vo2"), rhr = gLast("rhr"), hrv = gLast("hrv"), sl = gLast("sleep"), ss = gLast("sleepScore"), rd = gLast("ready"), ctl = gLast("ctl"), atl = gLast("atl");
+  const recent = (x) => x && (Date.parse(TODAY) - Date.parse(x.date)) / DAY <= 1;
+  const tiles = [], flags = [];
+  if (hrv) { const b = gBase("hrv", hrv.i, 7), d = b ? (hrv.v - b) / b * 100 : null; if (recent(hrv) && d !== null && d <= -10) flags.push("HRV"); tiles.push(gTile("HRV", fN(Math.round(hrv.v)), " ms", d === null ? "Ø 7 Tage fehlt" : (d >= 0 ? "+" : "") + fN(d, 0) + " % zu Ø", d !== null && d <= -10 ? "warn" : "")); }
+  if (rhr) { const b = gBase("rhr", rhr.i, 7), d = b ? rhr.v - b : null; if (recent(rhr) && d !== null && d >= 5) flags.push("Ruhepuls"); tiles.push(gTile("Ruhepuls", fN(Math.round(rhr.v)), " bpm", d === null ? "" : (d >= 0 ? "+" : "") + fN(d, 0) + " zu Ø", d !== null && d >= 5 ? "warn" : "")); }
+  if (sl) { const h = sl.v / 3600; if (recent(sl) && h < 6) flags.push("Schlaf"); tiles.push(gTile("Schlaf", Math.floor(h) + ":" + String(Math.round((h % 1) * 60)).padStart(2, "0"), " h", ss && ss.date === sl.date ? "Score " + Math.round(ss.v) : "", h < 6 ? "warn" : "")); }
+  if (rd) tiles.push(gTile("Bereitschaft", fN(Math.round(rd.v)), "", dm(rd.date)));
+  if (vo2) tiles.push(gTile("VO2max", fN(vo2.v, vo2.v % 1 ? 1 : 0), "", dm(vo2.date), "vo2"));
+  if (ctl && atl && ctl.date === atl.date) { const tsb = ctl.v - atl.v; tiles.push(gTile("Form", (tsb >= 0 ? "+" : "") + fN(Math.round(tsb)), "", "Fitness " + fN(Math.round(ctl.v)))); }
+  if (!tiles.length) return "";
+  const day = todayDay(), hard = day && day.keys && day.keys.some((k) => k === "int") && day.status !== "done";
+  const msg = flags.length >= 2 ? `${flags.join(" und ")} schlechter als sonst. ${hard ? "Heute die Intervalle besser locker fahren oder tauschen." : "Heute ruhig angehen."}`
+    : flags.length ? `${flags[0]} etwas schwächer als sonst. Hör heute auf deine Beine.`
+    : !recent(hrv) && !recent(rhr) ? `Noch keine Werte von heute. Uhr kurz mit Garmin Connect synchronisieren.` : `Erholung im grünen Bereich.`;
+  return `<section class="card span-12 recovery"><div class="card-h"><h3>Erholung</h3><span class="label">Garmin${GW.st && GW.st.stale ? " · nicht aktuell" : ""}</span></div><p class="g-msg ${flags.length ? "warn" : !recent(hrv) && !recent(rhr) ? "" : "ok"}"><i></i>${esc(msg)}</p><div class="g-tiles">${tiles.join("")}</div></section>`;
+}
+/* single-series line chart with a tap/hover readout (one measure per chart, no dual axis) */
+function lineChart(id, pts, unit, dec, color) {
+  pts = pts.filter((p) => typeof p.v === "number");
+  if (pts.length < 2) return `<p class="empty">Noch zu wenige Werte.</p>`;
+  const W = 360, H = 150, L = 34, Rr = 10, T = 14, B = 24;
+  let lo = Math.min(...pts.map((p) => p.v)), hi = Math.max(...pts.map((p) => p.v)); const pad = Math.max((hi - lo) * 0.15, dec ? 0.5 : 2); lo -= pad; hi += pad;
+  const t0 = Date.parse(pts[0].date), t1 = Date.parse(pts[pts.length - 1].date) || t0 + 1;
+  const x = (d) => L + (W - L - Rr) * ((Date.parse(d) - t0) / (t1 - t0 || 1)), y = (v) => T + (H - T - B) * (1 - (v - lo) / (hi - lo));
+  const ticks = [lo + (hi - lo) * 0.2, lo + (hi - lo) * 0.8];
+  const grid = ticks.map((v) => `<line x1="${L}" x2="${W - Rr}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" class="lc-grid"/><text x="${L - 6}" y="${(y(v) + 3).toFixed(1)}" text-anchor="end" class="lc-ax">${fN(v, dec)}</text>`).join("");
+  const xl = [pts[0], pts[pts.length - 1]].map((p, i) => `<text x="${x(p.date).toFixed(1)}" y="${H - 6}" text-anchor="${i ? "end" : "start"}" class="lc-ax">${dm(p.date)}</text>`).join("");
+  const path = pts.map((p, i) => (i ? "L" : "M") + x(p.date).toFixed(1) + " " + y(p.v).toFixed(1)).join("");
+  const last = pts[pts.length - 1];
+  const data = esc(JSON.stringify(pts.map((p) => [x(p.date).toFixed(1), y(p.v).toFixed(1), dm(p.date), fN(p.v, dec)])));
+  return `<div class="lc" data-lc="${data}" data-unit="${esc(unit)}"><div class="lc-read"><b class="num">${fN(last.v, dec)}</b><span>${esc(unit)} · ${dm(last.date)}</span></div>
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Verlauf ${esc(unit)}">${grid}${xl}<path d="${path}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <line class="lc-x" x1="0" x2="0" y1="${T}" y2="${H - B}" style="opacity:0"/><circle class="lc-dot" cx="${x(last.date).toFixed(1)}" cy="${y(last.v).toFixed(1)}" r="4.5" fill="${color}" stroke="var(--card-solid)" stroke-width="2"/></svg></div>`;
+}
+function garminTrendCard() {
+  if (!GW.days.length) return "";
+  const pick = (f) => GW.days.filter((d) => typeof d[f] === "number").map((d) => ({ date: d.date, v: d[f] }));
+  const vo2 = pick("vo2"), ctl = pick("ctl"), rhr = pick("rhr");
+  const vo2C = vo2.length >= 2 ? `<div><span class="label">VO2max</span>${lineChart("vo2", vo2, "VO2max", 0, "var(--violet)")}</div>` : "";
+  const ctlC = ctl.length >= 2 ? `<div><span class="label">Fitness (CTL)</span>${lineChart("ctl", ctl, "Fitness", 0, "var(--rad)")}</div>` : "";
+  const rhrC = !vo2C && rhr.length >= 2 ? `<div><span class="label">Ruhepuls</span>${lineChart("rhr", rhr, "bpm", 0, "var(--kraft)")}</div>` : "";
+  if (!vo2C && !ctlC && !rhrC) return "";
+  return `<section class="card span-12"><div class="card-h"><h3>Ausdauer-Entwicklung</h3><span class="label">Garmin · Antippen für Werte</span></div><div class="g-charts">${vo2C}${ctlC}${rhrC}</div></section>`;
+}
+function garminSetupCard() {
+  const st = GW.st || { mode: "wait" };
+  let main;
+  if (st.mode === "on") { const l = GW.days.length ? GW.days[GW.days.length - 1].date : null; main = `<div class="row"><span class="sp-dot on"></span><div style="flex:1"><b>Garmin verbunden</b><div class="label" style="letter-spacing:.04em;text-transform:none">Über intervals.icu${l ? " · Daten bis " + dm(l) : ""}${st.stale ? " · letzte Abfrage fehlgeschlagen" : ""}</div></div></div>`; }
+  else if (st.mode === "setup") main = `<div class="row"><span class="sp-dot"></span><div style="flex:1"><b>Garmin noch nicht verbunden</b><div class="label" style="letter-spacing:.04em;text-transform:none">Kostenloses Konto bei intervals.icu, dort Garmin verbinden, dann den API-Key in Vercel eintragen.</div></div></div>`;
+  else if (st.mode === "error") main = `<div class="row"><span class="sp-dot"></span><div style="flex:1"><b>Garmin-Daten nicht erreichbar</b><div class="label" style="letter-spacing:.04em;text-transform:none">${st.error === "key" ? "Der intervals.icu API-Key wird abgelehnt." : st.error === "athlete" ? "Die Athleten-ID passt nicht." : "intervals.icu antwortet gerade nicht."}</div></div><button class="btn sm" type="button" data-gcheck="1">Neu prüfen</button></div>`;
+  else if (st.mode === "login") main = `<div class="label">Erst mit Strava anmelden.</div>`;
+  else main = `<div class="label">Wird geprüft…</div>`;
+  return `<section class="card span-12"><div class="card-h"><h3>Garmin</h3><span class="label">VO2max · HRV · Schlaf</span></div>${main}</section>`;
+}
 /* ---------- Strava route graphic (from the activity's summary polyline, drawn as our own SVG) ---------- */
 function decodePoly(str) {
   const pts = []; let i = 0, lat = 0, lng = 0;
@@ -172,7 +244,7 @@ function vHeute() {
   const adj = adjustCard(W);
   return {
     hero: `<span class="label">${esc(eyebrow)}</span><h1 class="xl"><span class="${heroCls}">${esc(heroTitle)}</span></h1><p class="sub">${esc(heroSub)}</p>`,
-    body: extraLog + card + rings + adj + nextCard + chCard + `<section class="card span-12"><div class="kpis">${kpi("Level", levelOf(R.xp) + 1, "", esc(LEVELS[levelOf(R.xp)][1]))}${kpi("XP", fN(R.xp))}${kpi("Serie", R.wStreak, " Wo", R.dStreak + " Tage im Plan")}${kpi("Plan-Quote", quota === null ? "–" : quota, quota === null ? "" : " %")}</div></section>`,
+    body: extraLog + card + rings + recoveryCard() + adj + nextCard + chCard + `<section class="card span-12"><div class="kpis">${kpi("Level", levelOf(R.xp) + 1, "", esc(LEVELS[levelOf(R.xp)][1]))}${kpi("XP", fN(R.xp))}${kpi("Serie", R.wStreak, " Wo", R.dStreak + " Tage im Plan")}${kpi("Plan-Quote", quota === null ? "–" : quota, quota === null ? "" : " %")}</div></section>`,
   };
 }
 /* last logged values for an exercise and last note of the same session type, before a date */
@@ -344,7 +416,7 @@ function vErfolge() {
       `<section class="card span-12"><div class="card-h"><h3>Ziele bis 31. Januar</h3><span class="label">${Math.max(0, DAYS - Math.max(TI, 0))} Tage übrig</span></div><div class="goals">${goal("Rad-Kilometer", R.tot.km, 2000, "km", "rad")}${goal("Einheiten", R.doneAll, 112, "", "", (n) => n)}${goal("Krafteinheiten", R.tot.gym, 64, "", "kraft")}${goal("Höhenmeter", R.tot.hm, 3000, "Hm", "violet")}${goal("FTP", S.ftp || 0, fg || 220, "W", "gold", (n) => (n ? fN(n) : "–"), ftpProg())}</div></section>` +
       `<section class="card span-12"><div class="card-h"><h3>Abzeichen</h3><span class="label">${got} / ${R.badges.length} · je +100 XP</span></div><div class="badges">${R.badges.map((b) => `<div class="badge${b.got ? " got" : ""}"><span class="medal">${esc(b.k)}</span><div style="min-width:0"><div class="bt">${esc(b.t)}</div><div class="bd">${esc(b.d)}</div></div></div>`).join("")}</div></section>` +
       `<section class="card span-7"><div class="card-h"><h3>Strava</h3></div>${account}</section>` +
-      spotifyCard() +
+      spotifyCard() + garminSetupCard() +
       `<section class="card span-5"><div class="card-h"><h3>Ausgangslage</h3><span class="label">Ø pro Woche · 14.9.–11.10.</span></div>${S.live ? `<div class="kpis" style="grid-template-columns:repeat(2,minmax(0,1fr))">${kpi("Rad", fN(bk.reduce((t, a) => t + a.km, 0) / 4), " km")}${kpi("Rad-Zeit", fN(bk.reduce((t, a) => t + a.min, 0) / 240, 1), " h")}${kpi("Kraft", fN(base.filter((a) => a.cat === "gym").length / 4, 1), "×")}${kpi("Gesamt", fN(base.reduce((t, a) => t + a.min, 0) / 240, 1), " h")}</div>` : `<p class="empty">Erscheint, sobald Strava verbunden ist.</p>`}</section>`,
   };
 }
@@ -422,7 +494,7 @@ function vTests() {
   return {
     hero: `<span class="label">${roundState(cur) === "now" ? "Testwoche · jetzt" : "Nächster Test in " + daysTo + " Tagen · Etappe " + (cur.w + 1)}</span><h1 class="xl"><span class="grad-violet">Tests</span></h1><p class="sub">FTP-Test über 20 Minuten auf Zwift und Krafttest mit 6 Wiederholungen, alle 4 Wochen.</p>`,
     body: `<div class="span-12 kpis">${kpi("FTP", latest || base || "–", latest || base ? " W" : "", latest ? "aus Test " + fts[fts.length - 1].n : "Startwert aus Strava")}${kpi("Seit Start", delta === null ? "–" : (delta >= 0 ? "+" : "") + delta, delta === null ? "" : " W", base ? "Start " + base + " W" : "")}${kpi("W/kg", wkg ? fN(wkg, 2) : "–")}${kpi("Kraft", gain ? (gain >= 0 ? "+" : "") + fN(gain * 100, 1) : "–", gain ? " %" : "", "Ø Steigerung im 6-Wdh.-Test")}</div>` +
-      timeline + ftpCard + kraftCard,
+      timeline + ftpCard + kraftCard + garminTrendCard(),
   };
 }
 const RENDER = { heute: vHeute, tests: vTests, woche: vWoche, rad: vRad, kraft: vKraft, erfolge: vErfolge };
@@ -464,6 +536,7 @@ $("main").addEventListener("click", (e) => {
   const ed = t.closest("[data-exed]"); if (ed && !ed.disabled) { editEx(ed.dataset.exed, ed.dataset.k, +ed.dataset.n, +ed.dataset.d || 0); return; }
   const kt = t.closest("[data-ktab]"); if (kt) { kraftTab = kt.dataset.ktab; render(); return; }
   const rd = t.closest("[data-round]"); if (rd) { testRound = +rd.dataset.round; render(); return; }
+  if (t.closest("[data-gcheck]")) { GW.st = null; loadGarmin(); return; }
   if (t.closest("[data-spcheck]")) { SPOT.st = null; SPOT.lists = null; render(); return; }
   const dsc = t.closest("[data-discard]"); if (dsc) { Focus.confirmReset(dsc, dsc.dataset.discard); return; }
   const clr = t.closest("[data-clearday]"); if (clr) { confirmClear(clr, clr.dataset.clearday); return; }
@@ -777,7 +850,7 @@ function loadState() {
   const C = L.load("wa.checks"), CC = {}; Object.keys(C).forEach((k) => { const v = C[k]; if (v && Array.isArray(v.ex)) CC[k] = { key: v.key, ex: v.ex.slice() }; }); S.C = CC;
   recalcFtp();
 }
-const ASSET_V = "29";
+const ASSET_V = "30";
 function bootDb() { DB = makeDB(); S.dbOK = true; S.sync = "local"; loadState(); }
 async function syncRemote() {
   try {
@@ -833,7 +906,7 @@ async function load() {
     const P = await r.json(); applyStrava(P); S.live = true;
     try { localStorage.setItem("wa.cache", JSON.stringify(P)); } catch (_) {}
     notice(null); setLive("Strava", true);
-    syncRemote();
+    syncRemote(); loadGarmin();
   } catch (_) { setLive(S.live ? "Strava" : "Offline", S.live); }
   finally { render(); }
 }
@@ -873,3 +946,17 @@ function loadStage() {
   const go3d = () => add("https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js", () => add("/js/stage.js?v=" + ASSET_V, () => { if (window.Stage) { Stage.show(view); render(); } }));
   if ("requestIdleCallback" in window) requestIdleCallback(go3d, { timeout: 600 }); else setTimeout(go3d, 200);
 }
+
+/* line chart readout: hover (desktop) or tap/drag (phone) shows the nearest value */
+function lcPoint(ev) {
+  const box = ev.target.closest && ev.target.closest(".lc"); if (!box) return;
+  const svg = box.querySelector("svg"), r = svg.getBoundingClientRect(), vb = svg.viewBox.baseVal;
+  const px = (ev.clientX - r.left) * vb.width / r.width;
+  let pts; try { pts = JSON.parse(box.dataset.lc); } catch (_) { return; }
+  let best = pts[0]; for (const p of pts) if (Math.abs(p[0] - px) < Math.abs(best[0] - px)) best = p;
+  const dot = box.querySelector(".lc-dot"), xl = box.querySelector(".lc-x");
+  dot.setAttribute("cx", best[0]); dot.setAttribute("cy", best[1]); xl.setAttribute("x1", best[0]); xl.setAttribute("x2", best[0]); xl.style.opacity = 1;
+  box.querySelector(".lc-read").innerHTML = `<b class="num">${best[3]}</b><span>${esc(box.dataset.unit)} · ${best[2]}</span>`;
+}
+document.addEventListener("pointermove", lcPoint, { passive: true });
+document.addEventListener("pointerdown", lcPoint, { passive: true });
