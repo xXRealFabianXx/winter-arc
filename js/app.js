@@ -2,7 +2,8 @@
 /* Winter Arc — app shell: routing, views, editing sheet, storage, Strava. Uses globals from logic.js. */
 
 let R = null;
-const VIEWS = ["heute", "woche", "rad", "kraft", "erfolge"];
+const VIEWS = ["heute", "woche", "rad", "kraft", "tests", "erfolge"];
+let kraftTab = "plan", testRound = null;
 let view = "heute";
 
 /* ---------- small helpers ---------- */
@@ -16,16 +17,18 @@ const pct = (a, b) => Math.max(0, Math.min(100, b ? (a / b) * 100 : 0)).toFixed(
 function todayDay() { if (TI < 0) return R.allDays[0]; if (TI >= DAYS) return null; return R.allDays[TI]; }
 
 function statusChip(x) {
+  if (x.status === "done" && x.done.some((o) => o.partial)) return `<span class="chip pin">Teilweise</span>`;
+  if (x.mod && x.mod.easy && !x.locked) return `<span class="chip pin">Locker</span>`;
   const m = { done: ["done", "Erledigt"], rest: ["", "Ruhetag"], planned: ["", "Geplant"], pin: ["pin", "Festgelegt"], free: ["", "Frei"], empty: ["miss", "Kein Training"], extra: ["", "Extra"] }[x.status] || ["", "Geplant"];
   return `<span class="chip ${m[0]}">${m[1]}</span>`;
 }
 function dayRow(x, opts) {
-  const w = Math.floor(x.i / 7), k = x.keys[0], s = k ? sess(k, w) : null;
+  const w = Math.floor(x.i / 7), k = x.keys[0], s = sessOf(x);
   let title = s ? s.title : x.status === "rest" ? "Ruhetag" : x.status === "empty" ? "Kein Training" : "Frei";
   if (x.keys.length > 1) title += " + " + x.keys.slice(1).map((z) => sess(z, w).title).join(" + ");
   let meta = "";
-  if (x.done.length) meta = x.done.map((o) => (o.manual ? "ohne Strava eingetragen" : o.a.name + (o.a.cat === "bike" ? " · " + fN(o.a.km, 1) + " km" : " · " + fH(o.a.min) + " h"))).join(" · ");
-  else if (s) meta = s.cat === "bike" ? s.min + "′ · " + fillW(s.detail).split(".")[0] : s.sets + " Sätze × 6–8 · " + s.min + "′";
+  if (x.done.length) meta = x.done.map((o) => (o.manual ? "ohne Strava eingetragen" : o.a.name + (o.a.cat === "bike" ? " · " + fN(o.a.km, 1) + " km" : " · " + fH(o.a.min) + " h")) + (o.skipped && o.skipped.length ? " · " + o.skipped.length + " ausgelassen" : "")).join(" · ");
+  else if (s) meta = s.cat === "bike" ? s.min + "′ · " + fillW(s.detail).split(".")[0] : s.summary + " · " + s.min + "′" + (x.extraEx && x.extraEx.length ? " · +" + x.extraEx.length + " nachholen" : "");
   else if (x.extra.length) meta = x.extra.map((a) => a.name).join(" · ");
   const bar = s ? catCls(s.cat) : "";
   return `<button type="button" class="row${x.i === TI ? " today-row" : ""}" data-i="${x.i}" aria-label="${DOWL[x.d]} ${dm(x.date)} bearbeiten">
@@ -69,7 +72,7 @@ function vHeute() {
   let heroTitle = "Ziellinie", heroCls = "grad-done", heroSub = "16 Etappen geschafft.";
   let card = "";
   if (day) {
-    const k = day.keys[0], w = Math.floor(day.i / 7), s = k ? sess(k, w) : null, isToday = day.i === TI, canWrite = S.dbOK;
+    const k = day.keys[0], w = Math.floor(day.i / 7), s = sessOf(day), isToday = day.i === TI, canWrite = S.dbOK;
     if (day.status === "done") { heroTitle = "Erledigt"; heroCls = "grad-done"; heroSub = s ? s.title + " ist im Kasten." : "Stark."; }
     else if (day.status === "rest") { heroTitle = "Ruhetag"; heroCls = ""; heroSub = "Erholung gehört zum Plan. Die Woche ist neu verteilt."; }
     else if (!s) { heroTitle = "Frei"; heroCls = ""; heroSub = "Heute steht nichts an."; }
@@ -81,12 +84,14 @@ function vHeute() {
         <div class="t-detail">${esc(s.cat === "bike" ? fillW(s.detail) : s.detail + " · " + RIR(w))}</div>`;
       if (s.cat === "bike") body += `<div class="specs">${S.ftp ? `<span class="spec"><span>Z2</span>${fillW("{Z2}")}</span><span class="spec"><span>FTP</span>${S.ftp} W</span>` : `<span class="spec"><span>Zonen</span>in % FTP</span>`}<span class="spec"><span>Dauer</span>${s.min}′</span></div>`;
       if (s.ex) body += exChecklist(day, s);
+      if (day.status === "done" || (isToday && day.done.length)) body += feedbackBlock(day, s);
     } else {
       body += `<div class="t-title">${day.status === "rest" ? "Ruhetag" : "Frei"}</div><div class="t-detail">${day.status === "rest" ? "Eingetragen. Die übrigen Einheiten rücken nach." : "Keine Einheit geplant. Leg eine fest, wenn du Lust hast."}</div>`;
     }
     let a = "";
     if (isToday && day.status !== "done" && k) a += `<button class="btn primary" type="button" data-act="manual" data-k="${k}" ${canWrite ? "" : "disabled"}>✓ Erledigt</button>`;
     if (day.status !== "done") a += `<button class="btn" type="button" data-act="${day.e.rest ? "auto" : "rest"}" ${canWrite ? "" : "disabled"}>${day.e.rest ? "Ruhetag aufheben" : "Ruhetag"}</button>`;
+    if (s && (s.test || /FTP-Test/.test(s.title))) a += `<button class="btn" type="button" data-go="tests">Testwerte eintragen</button>`;
     a += `<button class="btn" type="button" data-act="sheet" data-i="${day.i}">Ändern</button>`;
     card = `<section class="card today span-8 ${s ? "accent-" + catCls(s.cat) : ""}" data-date="${day.date}">${body}<div class="btns" data-actions data-date="${day.date}">${a}</div></section>`;
   }
@@ -108,20 +113,61 @@ function vHeute() {
     body: card + rings + adj + nextCard + chCard + `<section class="card span-12"><div class="kpis">${kpi("Level", levelOf(R.xp) + 1, "", esc(LEVELS[levelOf(R.xp)][1]))}${kpi("XP", fN(R.xp))}${kpi("Serie", R.wStreak, " Wo", R.dStreak + " Tage im Plan")}${kpi("Plan-Quote", quota === null ? "–" : quota, quota === null ? "" : " %")}</div></section>`,
   };
 }
+/* last logged values for an exercise and last note of the same session type, before a date */
+function lastLog(name, before) {
+  const ds = Object.keys(S.L).filter((d) => d < before).sort().reverse();
+  for (const d of ds) { const e = S.L[d].ex && S.L[d].ex[name]; if (e && (e.kg || e.r)) return Object.assign({ date: d }, e); }
+  return null;
+}
+function lastNote(key, before) {
+  const ds = Object.keys(S.L).filter((d) => d < before && S.L[d].key === key && S.L[d].note).sort().reverse();
+  return ds.length ? { date: ds[0], note: S.L[ds[0]].note } : null;
+}
+const logTxt = (e) => [e.kg ? fN(e.kg, 1) + " kg" : "", e.s && e.r ? e.s + "×" + e.r : e.r ? e.r + " Wdh." : ""].filter(Boolean).join(" · ");
 function exChecklist(day, s) {
   const can = day.i === TI && S.dbOK;
+  const list = s.ex.map((e) => ({ n: e.n, s: e.s, r: e.r })).concat((day.extraEx || []).map((n) => ({ n, s: 2, r: "6–8", extra: true })));
   const on = new Set(S.C[day.date] && S.C[day.date].key === s.key ? S.C[day.date].ex : []);
-  const n = s.ex.filter((e) => on.has(e)).length;
-  return `<div style="display:flex;flex-direction:column;gap:10px"><div class="card-h"><span class="label">${can ? "Übungen abhaken" : "Übungen"}</span><span class="label num" style="color:${n === s.ex.length ? "var(--done)" : "var(--muted)"}">${n}/${s.ex.length}</span></div>
-    <div class="track"><i style="width:${Math.round((n / s.ex.length) * 100)}%"></i></div>
-    <div class="exgrid">${s.ex.map((e) => `<button type="button" class="ex${on.has(e) ? " on" : ""}" data-ex="${esc(e)}" data-date="${day.date}" data-k="${s.key}" aria-pressed="${on.has(e)}" ${can ? "" : "disabled"}><span class="box">✓</span><span class="nm">${esc(e)}</span><span class="sx">${s.sets}×6–8</span></button>`).join("")}</div></div>`;
+  const log = (S.L[day.date] && S.L[day.date].key === s.key) ? S.L[day.date] : { ex: {} };
+  const n = list.filter((e) => on.has(e.n)).length;
+  if (!list.length) return `<p class="empty">Keine Übungen hinterlegt. Leg sie unter Kraft → Übungen an.</p>`;
+  const ln = lastNote(s.key, day.date);
+  const items = list.map((e) => {
+    const L = log.ex[e.n] || {}, prev = lastLog(e.n, day.date), done = on.has(e.n);
+    const plan = s.test ? "6 Wdh. Test" : e.s + "×" + e.r;
+    return `<div class="exlog${done ? " on" : ""}${e.extra ? " extra" : ""}">
+      <button type="button" class="ex-h" data-ex="${esc(e.n)}" data-date="${day.date}" data-k="${s.key}" aria-pressed="${done}" ${can ? "" : "disabled"}><span class="box">✓</span><span class="nm">${esc(e.n)}</span><span class="sx">${e.extra ? "nachholen" : esc(plan)}</span></button>
+      ${prev ? `<span class="prev">Zuletzt ${esc(logTxt(prev))} · ${DOW[(idx(prev.date) % 7 + 7) % 7]} ${dm(prev.date)}</span>` : ""}
+      ${can ? `<div class="lg"><label><span>kg</span><input type="number" inputmode="decimal" step="0.5" min="0" max="500" value="${L.kg || ""}" placeholder="${prev && prev.kg ? fN(prev.kg, 1) : "–"}" data-log="kg" data-ex="${esc(e.n)}" data-date="${day.date}" data-k="${s.key}" aria-label="${esc(e.n)} Gewicht"></label>
+        <label><span>Sätze</span><input type="number" inputmode="numeric" step="1" min="1" max="10" value="${L.s || ""}" placeholder="${s.test ? 1 : e.s}" data-log="s" data-ex="${esc(e.n)}" data-date="${day.date}" data-k="${s.key}" aria-label="${esc(e.n)} Sätze"></label>
+        <label><span>Wdh.</span><input type="number" inputmode="numeric" step="1" min="1" max="50" value="${L.r || ""}" placeholder="${prev && prev.r ? prev.r : s.test ? 6 : 8}" data-log="r" data-ex="${esc(e.n)}" data-date="${day.date}" data-k="${s.key}" aria-label="${esc(e.n)} Wiederholungen"></label></div>` : (L.kg || L.r ? `<span class="prev" style="color:var(--ink2)">${esc(logTxt(L))}</span>` : "")}
+    </div>`;
+  }).join("");
+  return `<div style="display:flex;flex-direction:column;gap:10px">
+    ${ln ? `<div class="lastnote"><span class="label">Notiz vom letzten ${esc(s.title.replace("-Test", ""))} · ${dm(ln.date)}</span><p>${esc(ln.note)}</p></div>` : ""}
+    <div class="card-h"><span class="label">${can ? "Übungen eintragen" : "Übungen"}</span><span class="label num" style="color:${n === list.length ? "var(--done)" : "var(--muted)"}">${n}/${list.length}</span></div>
+    <div class="track"><i style="width:${Math.round((n / list.length) * 100)}%"></i></div>
+    <div class="exlist">${items}</div>
+    ${can ? `<label class="note"><span class="label">Notiz zum Training</span><textarea rows="2" maxlength="600" placeholder="z. B. Schulter zwickt, nächstes Mal 2,5 kg mehr" data-note="${day.date}" data-k="${s.key}">${esc(log.note || "")}</textarea></label>
+    <span class="label" style="letter-spacing:.06em">Gewicht eintragen hakt die Übung ab. Nicht abgehakte Übungen gelten als ausgelassen.</span>` : log.note ? `<div class="lastnote"><span class="label">Notiz</span><p>${esc(log.note)}</p></div>` : ""}</div>`;
+}
+const HOW = [["plan", "Wie geplant"], ["kuerzer", "Kürzer"], ["locker", "Lockerer"], ["haerter", "Härter"], ["anders", "Andere Einheit"]];
+const FEEL = [["frisch", "Frisch"], ["ok", "Okay"], ["muede", "Müde"], ["platt", "Platt"]];
+function feedbackBlock(day, s) {
+  const fb = S.F[day.date] || {}, bike = s && s.cat === "bike";
+  const chips = (field, opts) => opts.map((o) => `<button type="button" class="opt sm${fb[field] === o[0] ? " on" : ""}" data-fb="${field}" data-val="${o[0]}" data-date="${day.date}"><b>${o[1]}</b></button>`).join("");
+  return `<div class="fb"><span class="label">Rückmeldung</span>
+    ${bike ? `<span class="fb-q">Wie lief's?</span><div class="fb-row">${chips("how", HOW)}</div>` : ""}
+    <span class="fb-q">${bike ? "Wie sind die Beine?" : "Wie fühlst du dich?"}</span><div class="fb-row">${chips("feel", FEEL)}</div></div>`;
 }
 function adjustCard(W) {
   const w = W.w, lines = [];
+  (W.notes || []).forEach((m) => lines.push(esc(m)));
   W.moves.forEach((m) => lines.push(esc(m)));
   W.dropped.forEach((k) => lines.push(esc(sess(k, w).title) + (W.ended ? " wurde verpasst" : " passt diese Woche nicht mehr rein")));
-  if (!lines.length) return "";
-  return `<section class="card adjust span-12"><div class="card-h"><h3>Plan angepasst</h3><span class="label">Etappe ${w + 1}</span></div><ul>${lines.map((l) => "<li>" + l + "</li>").join("")}</ul></section>`;
+  if (!lines.length && !W.suggestRest) return "";
+  const sug = W.suggestRest ? `<div class="btns" data-date="${W.suggestRest}"><span style="flex-basis:100%;font-size:.92rem">Beine platt: ${DOWL[(idx(W.suggestRest) % 7 + 7) % 7]} lieber Ruhetag?</span><button class="btn rad sm" type="button" data-act="rest">Ruhetag übernehmen</button></div>` : "";
+  return `<section class="card adjust span-12"><div class="card-h"><h3>Plan angepasst</h3><span class="label">Etappe ${w + 1}</span></div>${lines.length ? `<ul>${lines.map((l) => "<li>" + l + "</li>").join("")}</ul>` : ""}${sug}</section>`;
 }
 function vWoche() {
   const w = S.sel, W = R.weeks[w], cw = curW();
@@ -164,7 +210,7 @@ function vKraft() {
     const s = sess(k, cw), dayThis = W.days.find((x) => x.keys.includes(k) || x.done.some((o) => o.k === k)), ld = lastDone(k);
     const st = dayThis ? (dayThis.done.some((o) => o.k === k) ? `<span class="chip done">Erledigt ${DOW[dayThis.d]}</span>` : `<span class="chip kraft"><i></i>${DOW[dayThis.d]} ${dm(dayThis.date)}</span>`) : `<span class="chip miss">Fällt aus</span>`;
     return `<section class="card split accent-kraft span-6"><div class="card-h"><span class="xl grad-kraft">${s.title}</span>${st}</div>
-      <ol>${s.ex.map((e) => `<li>${esc(e)}<span>${s.sets} × 6–8</span></li>`).join("")}</ol>
+      <ol>${s.ex.length ? s.ex.map((e) => { const p = lastLog(e.n, "9999"); return `<li><span class="li-n">${esc(e.n)}${p ? `<small>Zuletzt ${esc(logTxt(p))}</small>` : ""}</span><span>${e.s} × ${esc(e.r)}</span></li>`; }).join("") : `<li class="muted">Keine Übungen</li>`}</ol>
       <span class="label">${ld ? "Zuletzt " + DOW[ld.d] + " " + dm(ld.date) : "Noch nicht trainiert"} · ca. ${s.min}′</span></section>`;
   }).join("");
   const blocks = [["1–3", "Technik & Startgewichte", "RIR 2"], ["5–7", "Gewicht steigern", "RIR 1"], ["9–11", "Schwerste Phase", "RIR 0–1"], ["13–15", "Kraft halten", "RIR 1"]];
@@ -172,9 +218,12 @@ function vKraft() {
     <div class="rows">${blocks.map((b) => `<div class="row" style="grid-template-columns:64px minmax(0,1fr) auto;min-height:48px"><span class="label">Etappe ${b[0]}</span><span>${b[1]}</span><span class="chip kraft">${b[2]}</span></div>`).join("")}</div>
     <span class="label">Entlastung in Etappe 4, 8 und 12: Gewicht −10 %, Push & Pull 2 Sätze</span></section>`;
   const next = upcoming("gym", 4);
+  const seg = `<div class="span-12 seg" role="tablist"><button type="button" role="tab" aria-selected="${kraftTab === "plan"}" data-ktab="plan">Plan</button><button type="button" role="tab" aria-selected="${kraftTab === "uebungen"}" data-ktab="uebungen">Übungen</button></div>`;
+  const hero = `<span class="label">${esc(RIR(cw))}</span><h1 class="xl"><span class="grad-kraft">Kraft</span></h1><p class="sub">${W.gymN} von 4 Einheiten diese Woche · ${R.tot.gym} von 64 gesamt</p>`;
+  if (kraftTab === "uebungen") return { hero, body: seg + exEditor() };
   return {
-    hero: `<span class="label">${esc(RIR(cw))}</span><h1 class="xl"><span class="grad-kraft">Kraft</span></h1><p class="sub">${W.gymN} von 4 Einheiten diese Woche · ${R.tot.gym} von 64 gesamt</p>`,
-    body: `<div class="span-12 kpis">${kpi("Diese Woche", W.gymN, "/4")}${kpi("Gesamt", R.tot.gym, "/64")}${kpi("Nächste", next[0] ? esc(sess(next[0].keys[0], Math.floor(next[0].i / 7)).title) : "–", "", next[0] ? DOWL[next[0].d] + " " + dm(next[0].date) : "")}${kpi("Satzbereich", "6–8", " Wdh.")}</div>` +
+    hero,
+    body: seg + `<div class="span-12 kpis">${kpi("Diese Woche", W.gymN, "/4")}${kpi("Gesamt", R.tot.gym, "/64")}${kpi("Nächste", next[0] ? esc(sess(next[0].keys[0], Math.floor(next[0].i / 7)).title) : "–", "", next[0] ? DOWL[next[0].d] + " " + dm(next[0].date) : "")}${kpi("Satzbereich", "6–8", " Wdh.")}</div>` +
       splits + phaseCard +
       `<section class="card span-7"><div class="card-h"><h3>Krafteinheiten pro Etappe</h3><div class="legend label"><span><i style="background:var(--kraft)"></i>Ist</span><span><i style="border:1.5px dashed var(--muted)"></i>Plan 4</span></div></div>${weekChart(R.weeks.map((x) => ({ val: x.gymN, plan: 4 })), { step: 1, min: 4, tick: (v) => v, grad: "gKraft", aria: "Krafteinheiten je Etappe" })}</section>` +
       `<section class="card span-12"><div class="card-h"><h3>Letzte Krafteinheiten</h3></div>${recentList("gym", 6)}</section>`,
@@ -201,7 +250,84 @@ function vErfolge() {
       `<section class="card span-5"><div class="card-h"><h3>Ausgangslage</h3><span class="label">Ø pro Woche · 14.9.–11.10.</span></div>${S.live ? `<div class="kpis" style="grid-template-columns:repeat(2,minmax(0,1fr))">${kpi("Rad", fN(bk.reduce((t, a) => t + a.km, 0) / 4), " km")}${kpi("Rad-Zeit", fN(bk.reduce((t, a) => t + a.min, 0) / 240, 1), " h")}${kpi("Kraft", fN(base.filter((a) => a.cat === "gym").length / 4, 1), "×")}${kpi("Gesamt", fN(base.reduce((t, a) => t + a.min, 0) / 240, 1), " h")}</div>` : `<p class="empty">Erscheint, sobald Strava verbunden ist.</p>`}</section>`,
   };
 }
-const RENDER = { heute: vHeute, woche: vWoche, rad: vRad, kraft: vKraft, erfolge: vErfolge };
+
+/* ---------- exercise editor (Kraft → Übungen) ---------- */
+const REPS = ["6–8", "8–10", "10–12", "12–15", "5", "6"];
+function exEditor() {
+  const cards = ["push", "pull", "legs"].map((k) => {
+    const list = baseList(k);
+    return `<section class="card accent-kraft span-4"><div class="card-h"><span class="xl grad-kraft" style="font-size:2.3rem">${GYM[k].n}</span><span class="label">${list.length} Übungen</span></div>
+      <div class="exedit">${list.map((e, i) => `<div class="exrow"><span class="nm">${esc(e.n)}</span>
+        <span class="step"><button type="button" data-exed="sets" data-k="${k}" data-n="${i}" data-d="-1" aria-label="${esc(e.n)}: ein Satz weniger">−</button><b class="num">${e.s}</b><button type="button" data-exed="sets" data-k="${k}" data-n="${i}" data-d="1" aria-label="${esc(e.n)}: ein Satz mehr">+</button></span>
+        <button type="button" class="rep" data-exed="reps" data-k="${k}" data-n="${i}" aria-label="Wiederholungen ändern">${esc(e.r)}</button>
+        <span class="ord"><button type="button" data-exed="up" data-k="${k}" data-n="${i}" aria-label="Nach oben" ${i === 0 ? "disabled" : ""}>↑</button><button type="button" data-exed="down" data-k="${k}" data-n="${i}" aria-label="Nach unten" ${i === list.length - 1 ? "disabled" : ""}>↓</button><button type="button" data-exed="del" data-k="${k}" data-n="${i}" aria-label="${esc(e.n)} entfernen">✕</button></span></div>`).join("") || `<p class="empty">Noch keine Übungen.</p>`}</div>
+      <form class="exadd" data-k="${k}"><input type="text" id="add-${k}" name="n" placeholder="Übung hinzufügen" maxlength="40" autocomplete="off" required><button class="btn sm kraft" type="submit">Hinzufügen</button></form></section>`;
+  }).join("");
+  return cards + `<section class="card span-12"><div class="card-h"><h3>So wirkt es</h3>${EXC ? `<button class="btn sm" type="button" data-exed="reset">Standard wiederherstellen</button>` : ""}</div>
+    <p class="empty" style="color:var(--ink2)">Oberkörper am Sonntag besteht automatisch aus allen Push- und Pull-Übungen mit höchstens 2 Sätzen. In Entlastungswochen gehen Push und Pull auf 2 Sätze. Änderungen gelten ab sofort für alle kommenden Einheiten. Satzzahl mit − und +, Wiederholungen durch Antippen ändern.</p></section>`;
+}
+function editEx(act, k, n, d) {
+  if (act === "reset") { EXC = null; saveCfg("ex", null); render(); toast("Standard-Übungen wiederhergestellt"); return; }
+  if (!EXC) EXC = { push: baseList("push").map((e) => ({ ...e })), pull: baseList("pull").map((e) => ({ ...e })), legs: baseList("legs").map((e) => ({ ...e })) };
+  const L = EXC[k]; if (!L) return; const e = L[n];
+  if (act === "sets" && e) e.s = Math.max(1, Math.min(6, e.s + d));
+  else if (act === "reps" && e) e.r = REPS[(REPS.indexOf(e.r) + 1) % REPS.length];
+  else if (act === "up" && n > 0) [L[n - 1], L[n]] = [L[n], L[n - 1]];
+  else if (act === "down" && n < L.length - 1) [L[n + 1], L[n]] = [L[n], L[n + 1]];
+  else if (act === "del" && e) { L.splice(n, 1); toast(e.n + " entfernt"); }
+  saveCfg("ex", EXC); render();
+}
+function addEx(k, name) {
+  name = String(name || "").trim(); if (!name) return;
+  if (!EXC) EXC = { push: baseList("push").map((e) => ({ ...e })), pull: baseList("pull").map((e) => ({ ...e })), legs: baseList("legs").map((e) => ({ ...e })) };
+  if (EXC[k].some((e) => e.n.toLowerCase() === name.toLowerCase())) { toast(name + " ist schon drin"); return; }
+  EXC[k].push({ n: name, s: k === "legs" ? 2 : 3, r: "6–8" }); saveCfg("ex", EXC); render(); toast(name + " hinzugefügt");
+}
+
+/* ---------- tests ---------- */
+function roundState(t) { const a = t.w * 7, b = a + 6; return TI > b ? "done" : TI >= a ? "now" : "next"; }
+function vTests() {
+  const cur = TESTS.find((t) => roundState(t) !== "done") || TESTS[TESTS.length - 1];
+  if (testRound === null) testRound = (TESTS.slice().reverse().find((t) => roundState(t) !== "next") || TESTS[0]).n;
+  const fts = testFtps(), base = S.ftpBase || S.ftpStrava, latest = fts.length ? fts[fts.length - 1].ftp : null;
+  const delta = latest && base ? latest - base : null, gain = strengthGain();
+  const wkg = latest && S.weight ? latest / S.weight : null;
+  const dates = (t) => dm(iso(t.w * 7)) + " – " + dm(iso(t.w * 7 + 6));
+  const daysTo = Math.max(0, cur.w * 7 - TI);
+  const timeline = `<section class="card span-12"><div class="card-h"><h3>Testplan</h3><span class="label">Alle 4 Wochen · in den Entlastungswochen</span></div>
+    <div class="tl">${TESTS.map((t) => { const st = roundState(t), f = fts.find((x) => x.n === t.n); return `<button type="button" class="tl-i ${st}${t.n === testRound ? " sel" : ""}" data-round="${t.n}"><span class="tl-dot"></span><span class="label">Test ${t.n}</span><b class="xl">Etappe ${t.w + 1}</b><span class="muted" style="font-size:.8rem">${dates(t)}</span><span class="chip ${st === "done" ? "done" : st === "now" ? "pin" : ""}">${st === "done" ? (f ? "FTP " + f.ftp + " W" : "Vorbei") : st === "now" ? "Diese Woche" : "Geplant"}</span></button>`; }).join("")}</div></section>`;
+  // FTP chart
+  const pts = [{ l: "Start", v: base }].concat(TESTS.map((t) => ({ l: "T" + t.n, v: (fts.find((x) => x.n === t.n) || {}).ftp || null })));
+  const vals = pts.map((p) => p.v).filter(Boolean), lo = Math.floor((Math.min(...vals, base || 200) - 10) / 10) * 10, hi = Math.ceil((Math.max(...vals, (ftpGoal() || 220)) + 10) / 10) * 10;
+  const cw2 = 360, ch2 = 170, px = (i) => 30 + i * ((cw2 - 50) / 4), py = (v) => 14 + (ch2 - 40) * (1 - (v - lo) / (hi - lo));
+  let svg = `<line x1="30" x2="${cw2 - 12}" y1="${py(ftpGoal() || 220)}" y2="${py(ftpGoal() || 220)}" stroke="var(--rad2)" stroke-dasharray="4 4" stroke-width="1" fill="none"/><text x="${cw2 - 12}" y="${py(ftpGoal() || 220) - 6}" text-anchor="end" font-size="9.5" font-family="Geist Mono, monospace" fill="var(--rad2)">Ziel ${ftpGoal() || 220} W</text>`;
+  const known = pts.map((p, i) => ({ ...p, i })).filter((p) => p.v);
+  if (known.length > 1) svg += `<polyline points="${known.map((p) => px(p.i) + "," + py(p.v)).join(" ")}" fill="none" stroke="url(#gV)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>`;
+  pts.forEach((p, i) => { svg += `<text x="${px(i)}" y="${ch2 - 6}" text-anchor="middle" font-size="10" font-family="Geist Mono, monospace" fill="var(--muted)">${p.l}</text>`; if (p.v) svg += `<circle cx="${px(i)}" cy="${py(p.v)}" r="6" fill="var(--bg)" stroke="var(--violet)" stroke-width="3"/><text x="${px(i)}" y="${py(p.v) - 12}" text-anchor="middle" font-size="11" font-weight="600" font-family="Geist, sans-serif" fill="var(--ink)">${p.v}</text>`; });
+  const ftpChart = `<div class="chart"><svg viewBox="0 0 ${cw2} ${ch2}" role="img" aria-label="FTP-Verlauf über die Tests"><defs><linearGradient id="gV" x1="0" x2="1"><stop offset="0" stop-color="var(--violet)"/><stop offset="1" stop-color="var(--rad)"/></linearGradient></defs>${svg}</svg></div>`;
+  // selected round inputs
+  const t = TESTS.find((x) => x.n === testRound), st = roundState(t), open = st !== "next" && S.dbOK;
+  const p20 = (S.T.ftp || {})[t.n] || "";
+  const ftpCard = `<section class="card accent-rad span-6"><div class="card-h"><h3>FTP-Test · Test ${t.n}</h3><span class="label">20 Minuten</span></div>
+    ${ftpChart}
+    <form class="tform" data-tform="ftp" data-n="${t.n}"><label for="p20-${t.n}" class="label">20′-Durchschnitt in Watt</label>
+      <div class="tin"><input id="p20-${t.n}" name="v" type="number" inputmode="numeric" min="50" max="600" step="1" value="${p20}" placeholder="z. B. 220" ${open ? "" : "disabled"}><span class="tout">FTP <b class="num">${p20 ? ftpFrom20(+p20) + " W" : "–"}</b></span><button class="btn sm rad" type="submit" ${open ? "" : "disabled"}>Speichern</button></div></form>
+    <span class="label" style="letter-spacing:.06em">${open ? "FTP = 95 % des 20′-Schnitts. Trag den neuen Wert danach auch in Strava ein." : "Eintragen ab " + dm(iso(t.w * 7)) + "."}</span></section>`;
+  const K = (S.T.kraft || {})[t.n] || {}, prevN = t.n > 1 ? t.n - 1 : null, P = prevN ? (S.T.kraft || {})[prevN] || {} : {};
+  const groups = ["push", "pull", "legs"].map((k) => `<div class="tgroup"><span class="label">${GYM[k].n}</span>${baseList(k).map((e) => {
+    const v = K[e.n] || "", pv = P[e.n], d = v && pv ? ((v - pv) / pv) * 100 : null;
+    return `<div class="trow"><span class="nm">${esc(e.n)}</span>${d !== null ? `<span class="delta ${d >= 0 ? "up" : "down"}">${d >= 0 ? "+" : ""}${fN(d, 0)} %</span>` : pv ? `<span class="delta">vorher ${fN(pv, 1)}</span>` : "<span></span>"}<input type="number" inputmode="decimal" step="0.5" min="0" max="500" value="${v}" placeholder="kg" aria-label="${esc(e.n)} Gewicht für 6 Wiederholungen" data-tex="${esc(e.n)}" data-n="${t.n}" ${open ? "" : "disabled"}><span class="unit">kg</span></div>`;
+  }).join("")}</div>`).join("");
+  const kraftCard = `<section class="card accent-kraft span-6"><div class="card-h"><h3>Krafttest · Test ${t.n}</h3><span class="label">6 Wiederholungen</span></div>
+    <p class="empty" style="color:var(--ink2)">Pro Übung aufwärmen und das Gewicht eintragen, mit dem du genau 6 saubere Wiederholungen schaffst. Die Prozentzahl zeigt die Veränderung zum vorherigen Test.</p>${groups}
+    <span class="label" style="letter-spacing:.06em">${open ? "Wird beim Verlassen des Feldes gespeichert." : "Eintragen ab " + dm(iso(t.w * 7)) + "."}</span></section>`;
+  return {
+    hero: `<span class="label">${roundState(cur) === "now" ? "Testwoche · jetzt" : "Nächster Test in " + daysTo + " Tagen · Etappe " + (cur.w + 1)}</span><h1 class="xl"><span class="grad-violet">Tests</span></h1><p class="sub">FTP-Test über 20 Minuten und Krafttest mit 6 Wiederholungen, alle 4 Wochen.</p>`,
+    body: `<div class="span-12 kpis">${kpi("FTP", latest || base || "–", latest || base ? " W" : "", latest ? "aus Test " + fts[fts.length - 1].n : "Startwert aus Strava")}${kpi("Seit Start", delta === null ? "–" : (delta >= 0 ? "+" : "") + delta, delta === null ? "" : " W", base ? "Start " + base + " W" : "")}${kpi("W/kg", wkg ? fN(wkg, 2) : "–")}${kpi("Kraft", gain ? (gain >= 0 ? "+" : "") + fN(gain * 100, 1) : "–", gain ? " %" : "", "Ø Steigerung im 6-Wdh.-Test")}</div>` +
+      timeline + ftpCard + kraftCard,
+  };
+}
+const RENDER = { heute: vHeute, tests: vTests, woche: vWoche, rad: vRad, kraft: vKraft, erfolge: vErfolge };
 
 /* ---------- render ---------- */
 function render() {
@@ -216,6 +342,7 @@ function render() {
       rings: [W.bikeN / 3, W.gymN / 4, W.planned ? W.total / W.planned : 0],
       week: R.weeks[view === "woche" ? S.sel : curW()].days.map((x) => { const k = x.keys[0]; return { min: k ? sess(k, Math.floor(x.i / 7)).min : 0, cat: k ? CAT[k] : null, done: x.status === "done", rest: !k, today: x.i === TI }; }),
       level: { n: lv + 1, name: LEVELS[lv][1] },
+      ftp: S.ftp || 0, ftpSub: S.ftp && S.weight ? fN(S.ftp / S.weight, 2) + " W/KG" : "WATT",
     });
   }
 }
@@ -236,7 +363,11 @@ document.querySelector(".tabbar").addEventListener("click", (e) => { const b = e
 window.addEventListener("popstate", () => go((location.hash || "#heute").slice(1), false));
 $("main").addEventListener("click", (e) => {
   const t = e.target;
-  const ex = t.closest("[data-ex]"); if (ex && !ex.disabled) { toggleEx(ex.dataset.date, ex.dataset.k, ex.dataset.ex); return; }
+  const ed = t.closest("[data-exed]"); if (ed && !ed.disabled) { editEx(ed.dataset.exed, ed.dataset.k, +ed.dataset.n, +ed.dataset.d || 0); return; }
+  const kt = t.closest("[data-ktab]"); if (kt) { kraftTab = kt.dataset.ktab; render(); return; }
+  const rd = t.closest("[data-round]"); if (rd) { testRound = +rd.dataset.round; render(); return; }
+  const fb = t.closest("[data-fb]"); if (fb) { setFeedback(fb.dataset.date, fb.dataset.fb, fb.dataset.val); return; }
+  const ex = t.closest("button[data-ex]"); if (ex && !ex.disabled) { toggleEx(ex.dataset.date, ex.dataset.k, ex.dataset.ex); return; }
   const row = t.closest("[data-i]"); if (row && row.classList.contains("row")) { openSheet(+row.dataset.i); return; }
   const wk = t.closest("[data-wk]"); if (wk) { const d = +wk.dataset.wk; S.sel = d === 0 ? curW() : clampW(S.sel + d); render(); return; }
   const sw = t.closest("[data-w]"); if (sw) { S.sel = +sw.dataset.w; render(); return; }
@@ -248,6 +379,17 @@ $("main").addEventListener("click", (e) => {
   else if (act === "auto") writeEntry(date, null);
   else if (act === "manual") writeEntry(date, { manual: a.dataset.k });
   else if (act === "refresh") load();
+});
+$("main").addEventListener("submit", (e) => {
+  const f = e.target; e.preventDefault();
+  if (f.classList.contains("exadd")) { addEx(f.dataset.k, f.elements.n.value); return; }
+  if (f.dataset.tform === "ftp") { const v = +f.elements.v.value; setTest("ftp", +f.dataset.n, null, v > 0 ? v : null); toast(v > 0 ? "FTP " + ftpFrom20(v) + " W gespeichert" : "FTP-Wert gelöscht"); }
+});
+$("main").addEventListener("change", (e) => {
+  const lg = e.target.closest("[data-log]"); if (lg) { setLog(lg.dataset.date, lg.dataset.k, lg.dataset.ex, lg.dataset.log, lg.value); return; }
+  const nt = e.target.closest("[data-note]"); if (nt) { setNote(nt.dataset.note, nt.dataset.k, nt.value); return; }
+  const i = e.target.closest("[data-tex]"); if (!i) return;
+  const v = parseFloat(String(i.value).replace(",", ".")); setTest("kraft", +i.dataset.n, i.dataset.tex, v > 0 ? v : null);
 });
 /* drag the 3D object on the hero area */
 (function () {
@@ -275,12 +417,14 @@ function openSheet(i) {
     <span class="muted" style="font-size:.9rem">Aktuell: <b style="color:var(--ink)">${esc(now)}</b>${x.done.some((o) => o.a) ? " · aus Strava" : ""}</span>
     <div class="optgrid"><button type="button" class="opt${cur === "auto" ? " on" : ""}" data-set="auto"><b>Automatisch</b><span>Plan entscheidet</span></button><button type="button" class="opt${cur === "rest" ? " on" : ""}" data-set="rest"><b>Ruhetag</b><span>Rest der Woche rückt nach</span></button></div>
     <span class="label">${past ? "Ohne Strava erledigt" : "Diese Einheit festlegen"}</span><div class="optgrid">${opts}</div>
-    <span class="muted" style="font-size:.8rem">${past ? "Was in Strava steht, wird automatisch erkannt." : "Am Tag nach Beinen plant der Plan kein Rad. Festlegungen haben Vorrang."}</span>`;
+    <span class="muted" style="font-size:.8rem">${past ? "Was in Strava steht, wird automatisch erkannt." : "Am Tag nach Beinen plant der Plan kein Rad. Festlegungen haben Vorrang."}</span>
+    ${past && x.done.length ? feedbackBlock(x, sess(x.done[0].k, w)) : ""}`;
   $("scrim").hidden = false;
 }
 function closeSheet() { $("scrim").hidden = true; sheetI = null; }
 $("scrim").addEventListener("click", (e) => {
   if (e.target === $("scrim") || e.target.closest("[data-close]")) { closeSheet(); return; }
+  const fbb = e.target.closest("[data-fb]"); if (fbb) { const i = sheetI; setFeedback(fbb.dataset.date, fbb.dataset.fb, fbb.dataset.val); openSheet(i); return; }
   const b = e.target.closest("[data-set]"); if (!b || sheetI === null) return;
   const v = b.dataset.set;
   writeEntry(iso(sheetI), v === "auto" ? null : v === "rest" ? { rest: true } : v.startsWith("m:") ? { manual: v.slice(2) } : { pin: v.slice(2) });
@@ -297,17 +441,52 @@ async function writeEntry(date, val) {
   try { const ref = DB.doc("entries/" + date); if (val) await ref.set(val); else await ref.delete(); } catch (_) {}
   toast(val ? (val.rest ? "Ruhetag eingetragen · Woche neu geplant" : val.manual ? "Als erledigt eingetragen" : "Einheit festgelegt · Woche neu geplant") : "Zurück auf automatisch");
 }
-function toggleEx(date, key, name) {
+function toggleEx(date, key, name, soft) {
   if (!DB) return;
   const c = S.C[date] && S.C[date].key === key ? S.C[date].ex.slice() : [];
   const i = c.indexOf(name); if (i >= 0) c.splice(i, 1); else c.push(name);
   if (c.length) S.C[date] = { key, ex: c }; else delete S.C[date];
-  render();
-  if (i < 0 && c.length === (GYM[key] ? GYM[key].ex.length : 0)) toast("Alle Übungen geschafft");
+  if (soft) { // keep focus while typing values: update just this row
+    document.querySelectorAll("button.ex-h[data-date='" + date + "']").forEach((b) => { if (b.dataset.ex === name) { b.setAttribute("aria-pressed", "true"); b.closest(".exlog").classList.add("on"); } });
+  } else render();
+  const dd = R && R.allDays[idx(date)], total = (GYM[key] ? exOf(key, Math.floor(idx(date) / 7)).length : 0) + (dd && dd.extraEx ? dd.extraEx.length : 0);
+  if (i < 0 && c.length >= total) toast("Alle Übungen geschafft");
   const ref = DB.doc("checks/" + date); (c.length ? ref.set({ key, ex: c }) : ref.delete()).catch(() => {});
 }
+function setFeedback(date, field, val) {
+  if (!DB) return;
+  const cur = Object.assign({}, S.F[date] || {});
+  if (cur[field] === val) delete cur[field]; else cur[field] = val;
+  if (Object.keys(cur).length) S.F[date] = cur; else delete S.F[date];
+  render();
+  const ref = DB.doc("fb/" + date); (Object.keys(cur).length ? ref.set(cur) : ref.delete()).catch(() => {});
+  const W = R.weeks[Math.floor(idx(date) / 7)];
+  toast(W && (W.notes.length || W.suggestRest) ? "Gespeichert · Plan angepasst" : "Rückmeldung gespeichert");
+}
+function logOf(date, key) { const L = S.L[date] && S.L[date].key === key ? S.L[date] : { key, ex: {}, note: "" }; S.L[date] = L; return L; }
+function saveLog(date) { if (!DB) return; DB.doc("logs/" + date).set(S.L[date]).catch(() => {}); }
+function setLog(date, key, name, field, raw) {
+  if (!DB) return;
+  const v = parseFloat(String(raw).replace(",", ".")), L = logOf(date, key), e = Object.assign({}, L.ex[name] || {});
+  if (v > 0) e[field] = v; else delete e[field];
+  if (Object.keys(e).length) L.ex[name] = e; else delete L.ex[name];
+  saveLog(date);
+  const c = S.C[date] && S.C[date].key === key ? S.C[date].ex : [];
+  if (v > 0 && !c.includes(name)) { toggleEx(date, key, name, true); return; }
+  toast("Gespeichert");
+}
+function setNote(date, key, txt) { if (!DB) return; const L = logOf(date, key); L.note = String(txt || "").trim(); saveLog(date); toast(L.note ? "Notiz gespeichert" : "Notiz gelöscht"); }
+function saveCfg(key, val) { if (!DB) return; const ref = DB.doc("cfg/" + key); (val ? ref.set(val) : ref.delete()).catch(() => {}); }
+function setTest(kind, n, name, val) {
+  if (kind === "ftp") { if (val) S.T.ftp[n] = val; else delete S.T.ftp[n]; }
+  else { const r = Object.assign({}, S.T.kraft[n] || {}); if (val) r[name] = val; else delete r[name]; S.T.kraft[n] = r; }
+  saveCfg("tests", S.T); recalcFtp(); render();
+}
+function recalcFtp() { const f = testFtps(); S.ftp = f.length ? f[f.length - 1].ftp : S.ftpStrava || null; }
 function bootDb() {
-  const L = localDB(); DB = L; S.dbOK = true; S.E = L.load("wa.entries");
+  const L = localDB(); DB = L; S.dbOK = true; S.E = L.load("wa.entries"); S.F = L.load("wa.fb"); S.L = L.load("wa.logs");
+  const cfg = L.load("wa.cfg"); EXC = cfg.ex && typeof cfg.ex === "object" ? cfg.ex : null;
+  if (cfg.tests && typeof cfg.tests === "object") S.T = { ftp: cfg.tests.ftp || {}, kraft: cfg.tests.kraft || {} };
   const C = L.load("wa.checks"), CC = {}; Object.keys(C).forEach((k) => { const v = C[k]; if (v && Array.isArray(v.ex)) CC[k] = { key: v.key, ex: v.ex.slice() }; }); S.C = CC;
 }
 
@@ -315,10 +494,10 @@ function bootDb() {
 const LOGIN_NOTE = 'Verbinde einmal dein Strava-Konto, dann füllen sich Ringe, Woche und Erfolge mit deinen Einheiten. <a class="btn rad sm" href="/api/auth/login">Mit Strava verbinden</a>';
 function applyStrava(P) {
   S.acts = (P.activities || []).map(norm); S.stamp = P.fetchedAt || Date.now();
-  const A = P.athlete || {}; S.name = A.first_name || null; S.weight = A.weight || null; S.ftp = A.ftp || null;
+  const A = P.athlete || {}; S.name = A.first_name || null; S.weight = A.weight || null; S.ftpStrava = A.ftp || null;
   let base = null; try { base = +localStorage.getItem("wa.ftpBase") || null; } catch (_) {}
-  if (!base && S.ftp) { base = S.ftp; try { localStorage.setItem("wa.ftpBase", String(S.ftp)); } catch (_) {} }
-  S.ftpBase = base;
+  if (!base && S.ftpStrava) { base = S.ftpStrava; try { localStorage.setItem("wa.ftpBase", String(S.ftpStrava)); } catch (_) {} }
+  S.ftpBase = base; recalcFtp();
   const bikes = A.bikes || [], b = bikes.find((x) => x.primary && !x.retired) || bikes.find((x) => !x.retired);
   if (b) S.bike = { name: b.name, km: b.km };
 }

@@ -165,6 +165,40 @@
     return { idle(t, g2) { g2.rotation.y += 0; } , spin: true };
   });
 
+  /* ---------- tests: stopwatch with FTP on the dial ---------- */
+  holder("tests", (g) => {
+    const metal = new THREE.MeshStandardMaterial({ color: 0x2a2d36, metalness: 0.9, roughness: 0.28 });
+    const chrome = new THREE.MeshStandardMaterial({ color: 0xd9dde6, metalness: 1, roughness: 0.18 });
+    const glow = new THREE.MeshPhysicalMaterial({ color: C.violet, emissive: C.violet, emissiveIntensity: 0.6, roughness: 0.3, clearcoat: 1 });
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.16, 96), metal); body.rotation.x = Math.PI / 2; g.add(body);
+    const bezel = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.04, 20, 120), chrome); g.add(bezel);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.012, 12, 120), glow); ring.position.z = 0.082; g.add(ring);
+    const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.1, 32), chrome); crown.position.y = 0.64; g.add(crown);
+    const crownTop = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.05, 32), chrome); crownTop.position.y = 0.71; g.add(crownTop);
+    [-1, 1].forEach((s2) => { const b = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.08, 24), chrome); b.position.set(s2 * 0.42, 0.42, 0); b.rotation.z = -s2 * 0.75; g.add(b); });
+    const cv = document.createElement("canvas"); cv.width = cv.height = 512;
+    const tex = new THREE.CanvasTexture(cv); tex.encoding = THREE.sRGBEncoding;
+    const face = new THREE.Mesh(new THREE.CircleGeometry(0.49, 96), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.35, metalness: 0.2 })); face.position.z = 0.081; g.add(face);
+    const back = face.clone(); back.rotation.y = Math.PI; back.position.z = -0.081; g.add(back);
+    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.4, 0.01), new THREE.MeshPhysicalMaterial({ color: C.rad, emissive: C.rad, emissiveIntensity: 0.6 }));
+    hand.geometry.translate(0, 0.17, 0); hand.position.z = 0.092; g.add(hand);
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.02, 24), chrome); hub.rotation.x = Math.PI / 2; hub.position.z = 0.097; g.add(hub);
+    let drawn = "";
+    function draw(ftp, sub) {
+      const k = ftp + "|" + sub; if (k === drawn) return; drawn = k;
+      const x = cv.getContext("2d");
+      const gr = x.createRadialGradient(256, 220, 30, 256, 256, 260); gr.addColorStop(0, "#1d1830"); gr.addColorStop(1, "#08070d");
+      x.fillStyle = gr; x.fillRect(0, 0, 512, 512);
+      for (let i = 0; i < 60; i++) { const a = (i / 60) * Math.PI * 2, L = i % 5 ? 14 : 30; x.strokeStyle = i % 5 ? "rgba(255,255,255,.35)" : "#ffffff"; x.lineWidth = i % 5 ? 3 : 6; x.beginPath(); x.moveTo(256 + Math.sin(a) * 236, 256 - Math.cos(a) * 236); x.lineTo(256 + Math.sin(a) * (236 - L), 256 - Math.cos(a) * (236 - L)); x.stroke(); }
+      x.textAlign = "center"; x.fillStyle = "#b9a2ff"; x.font = "600 40px 'Geist Mono', monospace"; x.fillText("FTP", 256, 190);
+      x.fillStyle = "#ffffff"; x.font = "italic 900 150px 'Archivo', 'Arial Narrow', sans-serif"; x.fillText(ftp ? String(ftp) : "–", 256, 320);
+      x.fillStyle = "#ff8a4a"; x.font = "600 34px 'Geist', sans-serif"; x.fillText(sub, 256, 380);
+      tex.needsUpdate = true;
+    }
+    draw(0, "WATT");
+    return { set(ftp, sub) { draw(ftp, sub || "WATT"); }, idle(t, g2) { g2.rotation.y = Math.sin(t * 0.5) * 0.7; g2.position.y = Math.sin(t * 1.0) * 0.03; hand.rotation.z = -t * 1.2; } };
+  });
+
   /* ---------- erfolge: level medal ---------- */
   holder("erfolge", (g) => {
     const gold = new THREE.MeshStandardMaterial({ color: C.gold, metalness: 1, roughness: 0.22 });
@@ -204,7 +238,7 @@
   }
   window.addEventListener("resize", resize); resize();
   const baseX = () => (wide ? 0.95 : 0);
-  const SCALE = { heute: 1, woche: 1.05, rad: 1, kraft: 1, erfolge: 0.8 };
+  const SCALE = { heute: 1, woche: 1.05, rad: 1, kraft: 1, tests: 0.9, erfolge: 0.8 };
 
   function show(name) {
     if (!objects[name] || name === current) return;
@@ -256,6 +290,7 @@
       if (d.rings) objects.heute.set(d.rings);
       if (d.week) objects.woche.set(d.week);
       if (d.level) objects.erfolge.set(d.level.n, d.level.name);
+      if (d.ftp !== undefined) objects.tests.set(d.ftp, d.ftpSub);
     },
   };
 })();
