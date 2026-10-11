@@ -51,7 +51,7 @@ const Focus = (function () {
     else {
       const s = sessFor(date, key);
       const clone = (o) => (o === undefined || o === null ? null : JSON.parse(JSON.stringify(o)));
-      const snap = { L: clone(S.L[date]), C: clone(S.C[date]), F: clone(S.F[date]) };
+      const snap = { L: clone(S.L[date]), C: clone(S.C[date]), F: clone(S.F[date]), E: clone(S.E[date]) };
       F = { snap, date, key, cat: key === "free" ? "bike" : CAT[key], free: key === "free", laps: [], phase: "go", started: Date.now(), i: 0, set: 0, restEnd: 0, restDur: 90, elapsed: 0, runFrom: 0 };
       if (F.cat === "gym" && !(S.L[date] && S.L[date].key === key)) { logOf(date, key); saveLog(date); }
       if (F.cat === "bike") F.segs = F.free ? [] : bikeSegments(s);
@@ -72,8 +72,10 @@ const Focus = (function () {
   let armed = 0;
   function reset(date) {
     const live = F && F.date === date ? F : loadLive(); if (!live || live.date !== date) return;
-    const snap = live.snap || { L: null, C: null, F: null };
-    [["L", "logs"], ["C", "checks"], ["F", "fb"]].forEach(([k, col]) => {
+    let snap = live.snap;
+    if (!snap) { const e = S.E[date] ? Object.assign({}, S.E[date]) : null; if (e) delete e.manual; snap = { L: null, C: null, F: null, E: e && Object.keys(e).length ? e : null }; }
+    if (!("E" in snap)) { const e = S.E[date] ? Object.assign({}, S.E[date]) : null; if (e) delete e.manual; snap.E = e && Object.keys(e).length ? e : null; }
+    [["L", "logs"], ["C", "checks"], ["F", "fb"], ["E", "entries"]].forEach(([k, col]) => {
       const v = snap[k];
       if (v) { S[k][date] = v; DB.doc(col + "/" + date).set(v).catch(() => {}); }
       else { delete S[k][date]; DB.doc(col + "/" + date).delete().catch(() => {}); }
@@ -96,18 +98,27 @@ const Focus = (function () {
     const last = lastLog(name, F.date), lastSet = last && last.sets && last.sets[setIdx];
     return { kg: (prevSet && prevSet.kg) || (lastSet && lastSet.kg) || (last && last.kg) || 0, r: (prevSet && prevSet.r) || (lastSet && lastSet.r) || (last && last.r) || null };
   }
-  function doneSet() {
-    const { s, items } = list(), it = items[F.i]; if (!it) return;
-    const kg = parseFloat(String(document.getElementById("fkg").value).replace(",", ".")) || 0, r = parseInt(document.getElementById("freps").value, 10) || 0;
-    const L = logOf(F.date, F.key), e = Object.assign({}, L.ex[it.n] || {}); e.sets = (e.sets || []).slice(); e.sets[F.set] = { kg, r };
-    const done = e.sets.filter(Boolean); e.s = done.length; e.kg = kg || e.kg; e.r = r || e.r; L.ex[it.n] = e; saveLog(F.date);
-    const c = S.C[F.date]; if (!(c && c.key === F.key && c.ex.includes(it.n))) toggleEx(F.date, F.key, it.n, true);
-    const sets = s.test ? 1 : it.s;
-    if (F.set + 1 < sets) { F.set++; F.phase = "go"; }
-    else if (F.i + 1 < items.length) { F.i++; F.set = 0; F.phase = "go"; toast("Weiter: " + items[F.i].n); }
-    else { F.phase = "summary"; }
-    save(); draw();
+  function setOf(name, i) { const L = S.L[F.date], e = L && L.ex[name]; return e && e.sets && e.sets[i] ? e.sets[i] : null; }
+  function writeSet(name, i, patch) {
+    const L = logOf(F.date, F.key), e = Object.assign({}, L.ex[name] || {}); e.sets = (e.sets || []).slice();
+    const cur = Object.assign({}, e.sets[i] || {}, patch); Object.keys(cur).forEach((k) => { if (cur[k] === null || cur[k] === "" || cur[k] === 0 || cur[k] === false) delete cur[k]; });
+    e.sets[i] = Object.keys(cur).length ? cur : null;
+    const ss = e.sets.filter(Boolean), last = ss.slice().reverse().find((z) => z.kg || z.r);
+    e.s = ss.filter((z) => z.done || z.kg || z.r).length; if (last) { if (last.kg) e.kg = last.kg; else delete e.kg; if (last.r) e.r = last.r; else delete e.r; } else { delete e.kg; delete e.r; }
+    if (ss.length) L.ex[name] = e; else delete L.ex[name];
+    saveLog(F.date);
+    const c = S.C[F.date], has = c && c.key === F.key && c.ex.includes(name), any = e.sets.some((z) => z && z.done);
+    if (any !== !!has) toggleEx(F.date, F.key, name, true);
   }
+  function toggleSet(i) { const { items } = list(), it = items[F.i]; if (!it) return; const cur = setOf(it.n, i); writeSet(it.n, i, { done: !(cur && cur.done) }); draw(); }
+  function doneSet() { // tick the next open set; values stay optional
+    const { s, items } = list(), it = items[F.i]; if (!it) return;
+    const sets = s.test ? 1 : it.s; let i = 0; while (i < sets && setOf(it.n, i) && setOf(it.n, i).done) i++;
+    if (i < sets) { writeSet(it.n, i, { done: true }); i++; }
+    if (i >= sets) { if (F.i + 1 < items.length) { F.i++; toast("Weiter: " + items[F.i].n); } else F.phase = "summary"; }
+    F.phase = F.phase === "summary" ? "summary" : "go"; save(); draw();
+  }
+  function onSetInput(inp) { const v = parseFloat(String(inp.value).replace(",", ".")); writeSet(inp.dataset.n, +inp.dataset.si, { [inp.dataset.fk]: v > 0 ? v : null }); }
   function startRest() { F.phase = "rest"; F.restEnd = Date.now() + F.restDur * 1000; F.beeped = false; }
   function jump(i) { const { items } = list(); if (i < 0 || i >= items.length) return; F.i = i; F.set = Math.min(F.set, 0); F.phase = "go"; const L = S.L[F.date], e = L && L.ex[items[i].n]; F.set = e && e.sets ? Math.min(e.sets.filter(Boolean).length, (items[i].s || 3) - 1) : 0; save(); draw(); }
 
@@ -171,22 +182,39 @@ const Focus = (function () {
       <div class="f-ex"><span class="label">${it.extra ? "Nachholen" : it.added ? "Zusätzlich" : s.test ? "Test · 6 saubere Wdh." : esc(it.s + " × " + it.r + " Wdh.")}</span><h2 class="xl">${esc(it.n)}</h2>
         <div class="f-sets">${Array.from({ length: sets }, (_, k) => `<span class="${k < F.set ? "ok" : k === F.set ? "cur" : ""}">${k + 1}</span>`).join("")}</div>
         <span class="f-last">${last ? "Zuletzt " + esc(logTxt(last)) + " · " + dm(last.date) : "Erstes Mal: Gewicht wählen, mit dem " + (s.test ? "6" : esc(it.r)) + " saubere Wdh. gehen"}</span></div>
-      <div class="f-inputs">
-        <div class="f-step"><span class="label">Gewicht</span><div><button type="button" data-f="kg-" aria-label="2,5 kg weniger">−</button><input id="fkg" type="number" inputmode="decimal" step="0.5" min="0" value="${v.kg || ""}" placeholder="0" aria-label="Gewicht in kg"><button type="button" data-f="kg+" aria-label="2,5 kg mehr">+</button></div><span class="unit">kg</span></div>
-        <div class="f-step"><span class="label">Wiederholungen</span><div><button type="button" data-f="r-" aria-label="Eine Wiederholung weniger">−</button><input id="freps" type="number" inputmode="numeric" step="1" min="0" value="${v.r || targetReps(s.test ? "6" : it.r)}" aria-label="Wiederholungen"><button type="button" data-f="r+" aria-label="Eine Wiederholung mehr">+</button></div><span class="unit">Wdh.</span></div>
-      </div>
-      <button type="button" class="btn kraft f-cta" data-f="set">Satz ${F.set + 1} fertig</button>
+      ${setTable(it, sets, last)}
+      <button type="button" class="btn kraft f-cta" data-f="set">${nextLabel(it, sets, items)}</button>
       <div class="f-nav"><button type="button" class="btn" data-f="prev" ${F.i === 0 ? "disabled" : ""}>‹ Übung zurück</button><button type="button" class="btn" data-f="next">${F.i + 1 < items.length ? "Übung überspringen ›" : "Zum Abschluss ›"}</button></div>
       <button type="button" class="btn ghost-danger" data-f="reset" data-label="Training verwerfen">Training verwerfen</button></div>`;
   }
+  function setTable(it, sets, last) {
+    const rows = Array.from({ length: sets }, (_, i) => {
+      const v = setOf(it.n, i) || {}, ls = last && last.sets && last.sets[i];
+      const phKg = ls && ls.kg ? fN(ls.kg, 1) : last && last.kg ? fN(last.kg, 1) : "kg", phR = ls && ls.r ? ls.r : last && last.r ? last.r : targetReps(it.r);
+      return `<div class="f-setrow${v.done ? " ok" : ""}"><button type="button" class="f-chk" data-fset="${i}" aria-pressed="${!!v.done}" aria-label="Satz ${i + 1} ${v.done ? "offen setzen" : "abhaken"}">${v.done ? "✓" : i + 1}</button>
+        <label><input type="number" inputmode="decimal" step="0.5" min="0" value="${v.kg || ""}" placeholder="${phKg}" data-fin data-n="${esc(it.n)}" data-si="${i}" data-fk="kg" aria-label="Satz ${i + 1} Gewicht"><span>kg</span></label>
+        <label><input type="number" inputmode="numeric" step="1" min="0" value="${v.r || ""}" placeholder="${phR}" data-fin data-n="${esc(it.n)}" data-si="${i}" data-fk="r" aria-label="Satz ${i + 1} Wiederholungen"><span>Wdh.</span></label></div>`;
+    }).join("");
+    return `<div class="f-settable"><div class="f-sethead"><span class="label">Sätze</span><span class="label">Werte optional, jederzeit eintragbar</span></div>${rows}</div>`;
+  }
+  function nextLabel(it, sets, items) {
+    let i = 0; while (i < sets && setOf(it.n, i) && setOf(it.n, i).done) i++;
+    if (i < sets) return "Satz " + (i + 1) + " abhaken";
+    return F.i + 1 < items.length ? "Nächste Übung ›" : "Zum Abschluss ›";
+  }
   function drawSummary(f, s, items) {
     const L = S.L[F.date] || { ex: {} }; let vol = 0, setsN = 0;
-    const rows = items.map((x) => { const e = L.ex[x.n], ss = e && e.sets ? e.sets.filter(Boolean) : []; ss.forEach((z) => { vol += (z.kg || 0) * (z.r || 0); setsN++; }); return `<li><span>${esc(x.n)}</span><span class="num">${ss.length ? ss.map((z) => (z.kg ? fN(z.kg, 1) : "–") + "×" + (z.r || "–")).join("  ") : "ausgelassen"}</span></li>`; }).join("");
+    const rows = items.map((x) => {
+      const e = L.ex[x.n], sets = s.test ? 1 : x.s, last = lastLog(x.n, F.date);
+      for (let i = 0; i < sets; i++) { const z = e && e.sets && e.sets[i]; if (z && (z.done || z.kg || z.r)) { vol += (z.kg || 0) * (z.r || 0); setsN++; } }
+      const any = e && e.sets && e.sets.some((z) => z && (z.done || z.kg || z.r));
+      return `<details class="f-sumex"${any ? "" : ""}><summary><span>${esc(x.n)}</span><span class="num">${any ? e.sets.filter(Boolean).map((z) => (z.kg ? fN(z.kg, 1) : "–") + "×" + (z.r || "–")).join("  ") : "nichts eingetragen"}</span></summary>${setTable(x, sets, last)}</details>`;
+    }).join("");
     const mins = Math.round((Date.now() - F.started) / 60000);
     f.innerHTML = head(s.title, "Geschafft") + `<div class="f-body sum">
       <h2 class="xl grad-done">Stark.</h2>
       <div class="kpis" style="grid-template-columns:repeat(3,minmax(0,1fr))"><div class="kpi"><span class="label">Sätze</span><span class="v num">${setsN}</span></div><div class="kpi"><span class="label">Bewegt</span><span class="v num">${fN(vol / 1000, 1)}<small>t</small></span></div><div class="kpi"><span class="label">Dauer</span><span class="v num">${mins}<small>min</small></span></div></div>
-      <ul class="f-sum">${rows}</ul>
+      <div class="f-sumlist"><span class="label">Werte nachtragen: Übung antippen</span>${rows}</div>
       <label class="note"><span class="label">Notiz zum Training</span><textarea rows="3" maxlength="600" placeholder="Wie lief's? Was nächstes Mal ändern?" data-note="${F.date}" data-k="${F.key}">${esc(L.note || "")}</textarea></label>
       ${feedbackBlock(dayFor(F.date), s)}
       <button type="button" class="btn kraft f-cta" data-f="finish">Training beenden</button>
@@ -249,6 +277,7 @@ const Focus = (function () {
     const f = el(); if (!f || f.hidden || !f.contains(ev.target)) return;
     const fb = ev.target.closest("[data-fb]"); if (fb) { setFeedback(fb.dataset.date, fb.dataset.fb, fb.dataset.val); draw(); return; }
     const j = ev.target.closest("[data-fj]"); if (j) { jump(+j.dataset.fj); return; }
+    const fs = ev.target.closest("[data-fset]"); if (fs) { const box = fs.closest(".f-sumex"); if (box) { const name = box.querySelector("summary span").textContent; const cur = setOf(name, +fs.dataset.fset); writeSet(name, +fs.dataset.fset, { done: !(cur && cur.done) }); const open = [...el().querySelectorAll(".f-sumex")].map((d) => d.open); draw(); el().querySelectorAll(".f-sumex").forEach((d, k) => { d.open = open[k]; }); } else toggleSet(+fs.dataset.fset); return; }
     const b = ev.target.closest("[data-f]"); if (!b || b.disabled) return;
     const a = b.dataset.f, kg = document.getElementById("fkg"), rp = document.getElementById("freps");
     if (a === "close") close(true);
@@ -266,10 +295,16 @@ const Focus = (function () {
     else if (a === "seg+") bikeSkip(1);
     else if (a === "end") { F.elapsed = bikeElapsed(); F.runFrom = 0; F.phase = "summary"; save(); draw(); }
     else if (a === "tests") { close(false); go("tests", true); }
-    else if (a === "finish") { close(false); toast("Training beendet"); }
+    else if (a === "finish") {
+      const date = F.date, key = F.key, k = F.free ? null : key, d = dayFor(date);
+      const counted = d.done && d.done.some((o) => o.k === k || (k && CAT[o.k] === CAT[k] && o.a));
+      close(false);
+      if (k && !counted && idx(date) >= 0 && idx(date) < DAYS) { const e = Object.assign({}, S.E[date] || {}); delete e.rest; e.manual = k; writeEntry(date, e); toast("Training beendet · zählt als Einheit"); }
+      else toast("Training beendet");
+    }
     else if (a === "reset") confirmReset(b, F.date);
   });
-  document.addEventListener("change", (ev) => { const f = el(); if (!f || f.hidden || !f.contains(ev.target)) return; const nt = ev.target.closest("[data-note]"); if (nt) setNote(nt.dataset.note, nt.dataset.k, nt.value); });
+  document.addEventListener("change", (ev) => { const f = el(); if (!f || f.hidden || !f.contains(ev.target)) return; const fi = ev.target.closest("[data-fin]"); if (fi) { onSetInput(fi); return; } const nt = ev.target.closest("[data-note]"); if (nt) setNote(nt.dataset.note, nt.dataset.k, nt.value); });
   document.addEventListener("visibilitychange", () => { if (!document.hidden && F && !el().hidden) { keepAwake(); onTick(); } });
   setInterval(() => { if (!F) return; const t = mmss((Date.now() - F.started) / 1000); const c = document.getElementById("fclock"); if (c) c.textContent = t; const s2 = document.getElementById("fsess"); if (s2) s2.textContent = t; }, 1000);
 

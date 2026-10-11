@@ -114,8 +114,10 @@ function planWeek(w,prevLegs,byDate){
   }
   // 1) what already happened
   days.filter(x=>x.locked).forEach(x=>{
-    if(x.e.manual){const k=pool.has(x.e.manual)?x.e.manual:null;if(k){pool.delete(k);x.done.push({k:k,manual:true})}}
+    let absorb=null; // the session logged on the site and the Strava/Garmin recording of it count once
+    if(x.e.manual){const k=pool.has(x.e.manual)?x.e.manual:null;if(k){pool.delete(k);x.done.push({k:k,manual:true});absorb=CAT[k]}}
     x.acts.slice().sort((a,b)=>b.min-a.min).forEach(a=>{
+      if(absorb&&a.cat===absorb){absorb=null;const o=x.done.find(d=>d.manual&&!d.a);if(o)o.a=a;return}
       if(a.cat==="other"){x.extra.push(a);return}
       let k=null;const dk=x.e.pin||KEYS[x.d];
       if(a.cat==="gym"){k=gymKey(a.name);if(!k||!pool.has(k))k=(CAT[dk]==="gym"&&pool.has(dk))?dk:["push","pull","legs","upper"].find(z=>pool.has(z))||null}

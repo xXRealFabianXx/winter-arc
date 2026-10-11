@@ -72,7 +72,8 @@ function vHeute() {
   let heroTitle = "Ziellinie", heroCls = "grad-done", heroSub = "16 Etappen geschafft.";
   let card = "", extraLog = "";
   if (TI < 0 || TI >= DAYS) extraLog = logCard(pseudoToday());
-  if (day) {
+  if (day && TI < 0) { heroTitle = "Kraft"; heroCls = "grad-kraft"; const s0 = sessOf(day); heroSub = "Plan startet morgen mit " + (s0 ? s0.title : "dem ersten Training") + "."; }
+  if (day && TI >= 0) {
     const k = day.keys[0], w = Math.floor(day.i / 7), s = sessOf(day), isToday = day.i === TI, canWrite = S.dbOK;
     if (day.status === "done") { heroTitle = "Erledigt"; heroCls = "grad-done"; heroSub = s ? s.title + " ist im Kasten." : "Stark."; }
     else if (day.status === "rest") { heroTitle = "Ruhetag"; heroCls = ""; heroSub = "Erholung gehört zum Plan. Die Woche ist neu verteilt."; }
@@ -164,7 +165,7 @@ function exChecklist(day, s) {
     <div class="card-h"><span class="label">${can ? "Übungen eintragen" : canPlan ? "Übungen anpassen" : "Übungen"}</span><span class="label num" style="color:${n === list.length ? "var(--done)" : "var(--muted)"}">${n}/${list.length}</span></div>
     <div class="track"><i style="width:${Math.round((n / list.length) * 100)}%"></i></div>
     <div class="exlist"${canPlan ? ` data-sort="sess|${day.date}|${s.key}"` : ""}>${items}</div>${addForm}
-    ${can && (Object.keys(log.ex || {}).length || on.size) && !Focus.isLive(day.date) ? `<button type="button" class="btn ghost-danger sm" data-clearday="${day.date}" data-label="Einträge dieses Trainings löschen">Einträge dieses Trainings löschen</button>` : ""}
+    ${can && (Object.keys(log.ex || {}).length || on.size || (S.E[day.date] && S.E[day.date].manual)) && !Focus.isLive(day.date) ? `<button type="button" class="btn ghost-danger sm" data-clearday="${day.date}" data-label="Einträge dieses Trainings löschen">Einträge dieses Trainings löschen</button>` : ""}
     ${can ? `<label class="note"><span class="label">Notiz zum Training</span><textarea rows="2" maxlength="600" placeholder="z. B. Schulter zwickt, nächstes Mal 2,5 kg mehr" data-note="${day.date}" data-k="${s.key}">${esc(log.note || "")}</textarea></label>
     <span class="label" style="letter-spacing:.06em">Antippen hakt ab, Gewicht eintragen auch. ✕ entfernt eine Übung nur aus diesem Training, dauerhaft änderst du sie unter Kraft → Übungen.</span>` : canPlan ? `<span class="label" style="letter-spacing:.06em">Abhaken und Gewichte am Trainingstag. Hinzufügen und ✕ gelten nur für dieses Training.</span>` : log.note ? `<div class="lastnote"><span class="label">Notiz</span><p>${esc(log.note)}</p></div>` : ""}</div>`;
 }
@@ -596,6 +597,7 @@ function confirmClear(btn, date) {
     if (keep && (keep.extra.length || keep.removed.length || keep.order.length)) { S.L[date] = keep; DB.doc("logs/" + date).set(keep).catch(() => {}); } else { delete S.L[date]; DB.doc("logs/" + date).delete().catch(() => {}); }
     delete S.C[date]; DB.doc("checks/" + date).delete().catch(() => {});
     delete S.F[date]; DB.doc("fb/" + date).delete().catch(() => {});
+    if (S.E[date] && S.E[date].manual) { const e = Object.assign({}, S.E[date]); delete e.manual; if (Object.keys(e).length) { S.E[date] = e; DB.doc("entries/" + date).set(e).catch(() => {}); } else { delete S.E[date]; DB.doc("entries/" + date).delete().catch(() => {}); } }
     render(); toast("Einträge gelöscht"); return;
   }
   clearArmed = Date.now(); btn.textContent = "Wirklich löschen?"; btn.classList.add("danger");

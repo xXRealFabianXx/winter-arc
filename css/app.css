@@ -479,3 +479,23 @@ body.focus-open{overflow:hidden}
 
 .btn.ghost-danger{background:transparent;border-color:color-mix(in srgb,var(--bad) 40%,transparent);color:var(--bad)}
 .btn.ghost-danger.danger{background:var(--bad);color:#fff;border-color:var(--bad)}
+
+/* flexible set entry */
+.f-settable{display:flex;flex-direction:column;gap:8px}
+.f-sethead{display:flex;justify-content:space-between;gap:8px}
+.f-setrow{display:grid;grid-template-columns:52px minmax(0,1fr) minmax(0,1fr);gap:8px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:8px;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);transition:background .2s,border-color .2s}
+.f-setrow.ok{background:color-mix(in srgb,var(--done) 12%,transparent);border-color:color-mix(in srgb,var(--done) 55%,transparent)}
+.f-chk{width:52px;height:52px;border-radius:16px;border:1.5px solid var(--line-hi);font-family:var(--mono);font-weight:700;font-size:1rem;color:var(--muted)}
+.f-setrow.ok .f-chk{background:var(--done);border-color:var(--done);color:var(--on-ink);font-size:1.3rem}
+.f-setrow label{display:flex;align-items:center;gap:6px;background:var(--card-hi);border-radius:14px;padding:0 10px;min-width:0}
+.f-setrow input{background:transparent;border:0;min-height:52px;font-family:var(--display);font-stretch:70%;font-weight:900;font-style:italic;font-size:1.7rem !important;padding:0;text-align:right;width:100%}
+.f-setrow input::placeholder{color:var(--faint);font-weight:700}
+.f-setrow input:focus{outline:none}
+.f-setrow label:focus-within{box-shadow:0 0 0 2px var(--kraft2)}
+.f-setrow label span{font-family:var(--mono);font-size:.7rem;color:var(--muted)}
+.f-sumlist{display:flex;flex-direction:column;gap:8px}
+.f-sumex{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:4px 12px}
+.f-sumex[open]{padding-bottom:12px}
+.f-sumex summary{display:flex;justify-content:space-between;gap:10px;align-items:center;min-height:48px;cursor:pointer;list-style:none;font-size:.95rem}
+.f-sumex summary::-webkit-details-marker{display:none}
+.f-sumex summary span:last-child{font-family:var(--mono);font-size:.74rem;color:var(--ink2);text-align:right}
