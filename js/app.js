@@ -90,7 +90,8 @@ function vHeute() {
       body += `<div class="t-title">${day.status === "rest" ? "Ruhetag" : "Frei"}</div><div class="t-detail">${day.status === "rest" ? "Eingetragen. Die übrigen Einheiten rücken nach." : "Keine Einheit geplant. Leg eine fest, wenn du Lust hast."}</div>`;
     }
     let a = "";
-    if (isToday && day.status !== "done" && k) a += `<button class="btn primary" type="button" data-act="manual" data-k="${k}" ${canWrite ? "" : "disabled"}>✓ Erledigt</button>`;
+    if (isToday && k) { const ls = s.cat === "gym" ? logSess(day, s) : s; a += `<button class="btn ${s.cat === "bike" ? "rad" : "kraft"} start" type="button" data-start="${ls.key}" data-date="${day.date}">${Focus.isLive(day.date) ? "▶ Training fortsetzen" : "▶ Training starten"}</button>`; }
+    if (isToday && day.status !== "done" && k) a += `<button class="btn" type="button" data-act="manual" data-k="${k}" ${canWrite ? "" : "disabled"}>✓ Erledigt</button>`;
     if (day.status !== "done") a += `<button class="btn" type="button" data-act="${day.e.rest ? "auto" : "rest"}" ${canWrite ? "" : "disabled"}>${day.e.rest ? "Ruhetag aufheben" : "Ruhetag"}</button>`;
     if (s && (s.test || /FTP-Test/.test(s.title))) a += `<button class="btn" type="button" data-go="tests">Testwerte eintragen</button>`;
     a += `<button class="btn" type="button" data-act="sheet" data-i="${day.i}">Ändern</button>`;
@@ -126,6 +127,13 @@ function lastNote(key, before) {
   return ds.length ? { date: ds[0], note: S.L[ds[0]].note } : null;
 }
 const logTxt = (e) => [e.kg ? fN(e.kg, 1) + " kg" : "", e.s && e.r ? e.s + "×" + e.r : e.r ? e.r + " Wdh." : ""].filter(Boolean).join(" · ");
+function sessionList(day, s) {
+  const log = (S.L[day.date] && S.L[day.date].key === s.key) ? S.L[day.date] : { ex: {} };
+  const rm = log.removed || [], addl = log.extra || [];
+  return s.ex.filter((e) => !rm.includes(e.n)).map((e) => ({ n: e.n, s: e.s, r: e.r }))
+    .concat((day.extraEx || []).filter((n) => !rm.includes(n)).map((n) => ({ n, s: 2, r: "6–8", extra: true })))
+    .concat(addl.filter((n) => !s.ex.some((e) => e.n === n)).map((n) => ({ n, s: s.key === "legs" ? 2 : 3, r: "6–8", added: true })));
+}
 function exChecklist(day, s) {
   const can = day.i === TI && S.dbOK, canPlan = S.dbOK && day.i >= TI && !(day.locked && day.i < TI);
   const log = (S.L[day.date] && S.L[day.date].key === s.key) ? S.L[day.date] : { ex: {} };
@@ -174,7 +182,7 @@ function splitPicker(date, cur, q) {
 function logCard(day) {
   const lk = S.L[day.date] && S.L[day.date].key, w = Math.max(0, Math.floor(day.i / 7));
   return `<section class="card accent-kraft span-12"><div class="card-h"><h3>Heute Kraft trainiert?</h3><span class="label">${TI < 0 ? "Vor dem Planstart" : "Auch außerhalb des Plans"}</span></div>
-    ${splitPicker(day.date, lk || "push", "Welche Einheit?")}${exChecklist(day, sess(lk && GYM[lk] ? lk : "push", w))}</section>`;
+    ${splitPicker(day.date, lk || "push", "Welche Einheit?")}<div class="btns"><button class="btn kraft start" type="button" data-start="${lk && GYM[lk] ? lk : "push"}" data-date="${day.date}">${Focus.isLive(day.date) ? "▶ Training fortsetzen" : "▶ Training starten"}</button></div>${exChecklist(day, sess(lk && GYM[lk] ? lk : "push", w))}</section>`;
 }
 const HOW = [["plan", "Wie geplant"], ["kuerzer", "Kürzer"], ["locker", "Lockerer"], ["haerter", "Härter"], ["anders", "Andere Einheit"]];
 const FEEL = [["frisch", "Frisch"], ["ok", "Okay"], ["muede", "Müde"], ["platt", "Platt"]];
@@ -392,6 +400,7 @@ $("main").addEventListener("click", (e) => {
   const ed = t.closest("[data-exed]"); if (ed && !ed.disabled) { editEx(ed.dataset.exed, ed.dataset.k, +ed.dataset.n, +ed.dataset.d || 0); return; }
   const kt = t.closest("[data-ktab]"); if (kt) { kraftTab = kt.dataset.ktab; render(); return; }
   const rd = t.closest("[data-round]"); if (rd) { testRound = +rd.dataset.round; render(); return; }
+  const st = t.closest("[data-start]"); if (st) { Focus.start(st.dataset.date, st.dataset.start); return; }
   const chg = t.closest("[data-change]"); if (chg) { const v = chg.dataset.change; writeEntry(chg.dataset.date, v === "auto" ? null : v === "rest" ? { rest: true } : { pin: v }); return; }
   const lkb = t.closest("[data-logkey]"); if (lkb) { setLogKey(lkb.dataset.date, lkb.dataset.logkey); return; }
   const rmb = t.closest("[data-exrm]"); if (rmb) { sessionEx(rmb.dataset.date, rmb.dataset.k, rmb.dataset.exrm, "remove"); return; }
@@ -659,4 +668,5 @@ setInterval(dayCheck, 60000);
   }
   go((location.hash || "#heute").slice(1), false);
   load();
+  Focus.resume();
 })();
