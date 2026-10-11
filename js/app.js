@@ -287,7 +287,7 @@ function vErfolge() {
       `<section class="card span-12"><div class="card-h"><h3>Ziele bis 31. Januar</h3><span class="label">${Math.max(0, DAYS - Math.max(TI, 0))} Tage übrig</span></div><div class="goals">${goal("Rad-Kilometer", R.tot.km, 2000, "km", "rad")}${goal("Einheiten", R.doneAll, 112, "", "", (n) => n)}${goal("Krafteinheiten", R.tot.gym, 64, "", "kraft")}${goal("Höhenmeter", R.tot.hm, 3000, "Hm", "violet")}${goal("FTP", S.ftp || 0, fg || 220, "W", "gold", (n) => (n ? fN(n) : "–"), ftpProg())}</div></section>` +
       `<section class="card span-12"><div class="card-h"><h3>Abzeichen</h3><span class="label">${got} / ${R.badges.length} · je +100 XP</span></div><div class="badges">${R.badges.map((b) => `<div class="badge${b.got ? " got" : ""}"><span class="medal">${esc(b.k)}</span><div style="min-width:0"><div class="bt">${esc(b.t)}</div><div class="bd">${esc(b.d)}</div></div></div>`).join("")}</div></section>` +
       `<section class="card span-7"><div class="card-h"><h3>Strava</h3></div>${account}</section>` +
-      `<section class="card span-12"><div class="card-h"><h3>Musik im Training</h3><span class="label">Spotify</span></div><form class="exadd" data-music="1"><input type="text" name="u" value="${esc(musicUrl())}" placeholder="Spotify-Link deiner Playlist einfügen" aria-label="Spotify-Link"><button class="btn sm rad" type="submit">Speichern</button></form><span class="label" style="letter-spacing:.06em">In Spotify bei der Playlist auf Teilen → Link kopieren. Ganze Songs laufen, wenn du im selben Browser bei Spotify angemeldet bist.</span></section>` +
+      spotifyCard() +
       `<section class="card span-5"><div class="card-h"><h3>Ausgangslage</h3><span class="label">Ø pro Woche · 14.9.–11.10.</span></div>${S.live ? `<div class="kpis" style="grid-template-columns:repeat(2,minmax(0,1fr))">${kpi("Rad", fN(bk.reduce((t, a) => t + a.km, 0) / 4), " km")}${kpi("Rad-Zeit", fN(bk.reduce((t, a) => t + a.min, 0) / 240, 1), " h")}${kpi("Kraft", fN(base.filter((a) => a.cat === "gym").length / 4, 1), "×")}${kpi("Gesamt", fN(base.reduce((t, a) => t + a.min, 0) / 240, 1), " h")}</div>` : `<p class="empty">Erscheint, sobald Strava verbunden ist.</p>`}</section>`,
   };
 }
@@ -615,6 +615,46 @@ function setSetsN(date, key, name, n) {
   saveLog(date);
 }
 /* Spotify playlist for the training mode */
+// --- Spotify (direct connection via /api/spotify/*) ---
+const SPOT = { st: null, lists: null, busy: false };
+async function spState() {
+  try {
+    const r = await fetch("/api/spotify/player", { credentials: "same-origin", cache: "no-store" });
+    if (r.status === 401) SPOT.st = { mode: "login" };
+    else if (r.ok) SPOT.st = Object.assign({ mode: "on" }, await r.json());
+    else SPOT.st = { mode: "off" };
+  } catch (_) { SPOT.st = SPOT.st && SPOT.st.mode === "on" ? SPOT.st : { mode: "off" }; }
+  return SPOT.st;
+}
+const SP_ERR = { no_device: "Kein aktives Gerät – öffne Spotify kurz auf dem Handy und spiel was an", premium: "Steuern geht nur mit Spotify Premium", login: "Bitte Spotify neu verbinden", not_configured: "Spotify ist noch nicht eingerichtet" };
+async function spCmd(action, uri) {
+  try {
+    const r = await fetch("/api/spotify/player", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, uri }) });
+    if (r.ok) return true;
+    const j = await r.json().catch(() => ({}));
+    if (j.error === "login") SPOT.st = { mode: "login" };
+    toast(SP_ERR[j.error] || "Spotify hat nicht reagiert");
+  } catch (_) { toast("Keine Verbindung zu Spotify"); }
+  return false;
+}
+async function spLists() {
+  if (SPOT.lists) return SPOT.lists;
+  try { const r = await fetch("/api/spotify/player?playlists=1", { credentials: "same-origin" }); if (r.ok) SPOT.lists = (await r.json()).playlists || []; } catch (_) {}
+  return SPOT.lists || [];
+}
+function spotifyCard() {
+  const st = SPOT.st;
+  if (!st && !SPOT.busy) { SPOT.busy = true; spState().then(() => { SPOT.busy = false; if ((location.hash || "").slice(1) === "erfolge") render(); }); }
+  const mode = st ? st.mode : "wait";
+  const head = '<div class="card-h"><h3>Musik im Training</h3><span class="label">Spotify</span></div>';
+  let main;
+  if (mode === "on") main = `<div class="row"><span class="sp-dot on"></span><div style="flex:1"><b>Spotify verbunden</b><div class="label" style="letter-spacing:.04em">${st.track ? esc(st.track.name) + " · " + esc(st.track.artist) : "Im Training steuerst du Musik direkt unten in der Leiste."}${st.device ? " · " + esc(st.device.name) : ""}</div></div><a class="btn sm" href="/api/spotify/logout">Trennen</a></div>`;
+  else if (mode === "login") main = `<div class="row"><span class="sp-dot"></span><div style="flex:1"><b>Spotify verbinden</b><div class="label" style="letter-spacing:.04em">Dann siehst du im Training, was läuft, und steuerst Play, Skip und Playlists. Braucht Spotify Premium.</div></div><a class="btn sm sp" href="/api/spotify/login">Verbinden</a></div>`;
+  else if (mode === "off") main = `<div class="label" style="letter-spacing:.04em">Direkte Spotify-Verbindung ist noch nicht eingerichtet (Spotify-App in Vercel fehlt). Bis dahin klappt der Playlist-Link.</div>`;
+  else main = `<div class="label">Spotify wird geprüft…</div>`;
+  return `<section class="card span-12">${head}${main}<details class="sp-alt"${mode === "on" ? "" : " open"}><summary class="label">Alternative: Playlist-Link</summary><form class="exadd" data-music="1"><input type="text" name="u" value="${esc(musicUrl())}" placeholder="Spotify-Link deiner Playlist einfügen" aria-label="Spotify-Link"><button class="btn sm rad" type="submit">Speichern</button></form><span class="label" style="letter-spacing:.06em">In Spotify bei der Playlist auf Teilen → Link kopieren.</span></details></section>`;
+}
+
 function spotifyEmbed(url) {
   const m = String(url || "").trim().match(/(?:open\.spotify\.com\/(?:intl-[a-z]+\/)?(?:embed\/)?|spotify:)(playlist|album|track|artist|show|episode)[\/:]([A-Za-z0-9]{10,40})/);
   return m ? "https://open.spotify.com/embed/" + m[1] + "/" + m[2] + "?utm_source=generator&theme=0" : null;
@@ -745,6 +785,12 @@ setInterval(dayCheck, 60000);
     const m = { ok: "Strava verbunden", abgelehnt: "Strava-Verbindung abgebrochen", rechte: "Bitte erlaube den Zugriff auf deine Aktivitäten", state: "Anmeldung abgelaufen, bitte nochmal verbinden", token: "Strava hat die Anmeldung abgelehnt", fehler: "Strava-Verbindung fehlgeschlagen" }[q];
     if (m) toast(m);
     if (q === "token") notice("Strava hat die Anmeldung abgelehnt" + (feld ? " (Feld: " + esc(feld) + ")" : "") + ". Prüfe Client ID und Secret in Vercel, dann Redeploy. " + '<a class="btn sm" href="/api/auth/login">Nochmal verbinden</a>');
+    try { history.replaceState(null, "", location.pathname + location.hash); } catch (_) {}
+  }
+  const sq = qs.get("spotify");
+  if (sq) {
+    const m = { ok: "Spotify verbunden", abgelehnt: "Spotify-Verbindung abgebrochen", fehler: "Spotify-Verbindung fehlgeschlagen" }[sq];
+    if (m) toast(m);
     try { history.replaceState(null, "", location.pathname + location.hash); } catch (_) {}
   }
   go((location.hash || "#heute").slice(1), false);

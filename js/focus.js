@@ -59,21 +59,60 @@ const Focus = (function () {
     }
     save(); open();
   }
+  let spPoll = null, spListOpen = false;
+  function spBar(m, st) {
+    if (m.dataset.url !== "sp") {
+      m.dataset.url = "sp";
+      m.innerHTML = `<div class="f-sp"><div class="f-spimg"></div><div class="f-spt"><b></b><span class="label"></span></div><div class="f-spc"><button type="button" data-fsp="previous" aria-label="Zurück">⏮</button><button type="button" class="f-spplay" data-fsp="toggle" aria-label="Abspielen">▶</button><button type="button" data-fsp="next" aria-label="Weiter">⏭</button><button type="button" data-fsp="lists" aria-label="Playlists">☰</button></div></div><div class="f-spbar"><i></i></div><div class="f-splists" hidden></div>`;
+    }
+    const t = st.track, img = m.querySelector(".f-spimg");
+    img.style.backgroundImage = t && t.image ? `url("${String(t.image).replace(/"/g, "")}")` : "";
+    img.classList.toggle("empty", !(t && t.image));
+    m.querySelector(".f-spt b").textContent = t ? t.name : "Gerade läuft nichts";
+    m.querySelector(".f-spt .label").textContent = t ? t.artist + (st.device ? " · " + st.device.name : "") : (st.device ? st.device.name : "Spotify kurz am Handy öffnen, dann hier steuern");
+    const pl = m.querySelector(".f-spplay"); pl.textContent = st.playing ? "⏸" : "▶"; pl.setAttribute("aria-label", st.playing ? "Pause" : "Abspielen");
+    m.querySelector(".f-spbar").hidden = !t;
+    m.querySelector(".f-spbar i").style.width = t && t.duration ? Math.min(100, t.progress / t.duration * 100) + "%" : "0%";
+    m.querySelector(".f-spbar").title = t ? mmss(t.progress / 1000) + " / " + mmss(t.duration / 1000) : "";
+    const L = m.querySelector(".f-splists"); L.hidden = !spListOpen;
+  }
   function musicBar() {
     const m = document.getElementById("fmusic"); if (!m) return;
-    const url = musicUrl(), emb = spotifyEmbed(url);
-    if (m.dataset.url === (emb || "") && m.childElementCount) return; // keep the player (and the music) running
-    m.dataset.url = emb || "";
-    if (emb) m.innerHTML = `<button type="button" class="f-mtoggle" data-fm="toggle"><span>♫</span><b>Musik</b><span class="label">Spotify</span></button><div class="f-mplayer" hidden><iframe src="${emb}" title="Spotify-Player" width="100%" height="152" frameborder="0" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe></div>`;
-    else m.innerHTML = `<button type="button" class="f-mtoggle" data-fm="toggle"><span>♫</span><b>Playlist verbinden</b><span class="label">Spotify</span></button><div class="f-mplayer" hidden><form class="exadd" data-fmusic="1"><input type="text" name="u" placeholder="Spotify-Link der Playlist" aria-label="Spotify-Link"><button class="btn sm rad" type="submit">Speichern</button></form><span class="label" style="letter-spacing:.06em">In Spotify: Playlist → Teilen → Link kopieren.</span></div>`;
+    const st = SPOT.st;
+    if (st && st.mode === "on") return spBar(m, st);
+    const url = musicUrl(), emb = spotifyEmbed(url), login = !!(st && st.mode === "login");
+    const key = (emb || "") + (login ? "|login" : "");
+    if (m.dataset.url === key && m.childElementCount) return; // keep the player (and the music) running
+    m.dataset.url = key;
+    const conn = login ? `<a class="btn sm sp" href="/api/spotify/login">Mit Spotify verbinden</a><span class="label" style="letter-spacing:.06em">Dann steuerst du hier, was auf deinem Handy läuft. Dein Training bleibt gespeichert.</span>` : "";
+    if (emb) m.innerHTML = `<button type="button" class="f-mtoggle" data-fm="toggle"><span>♫</span><b>Musik</b><span class="label">Spotify</span></button><div class="f-mplayer" hidden>${conn}<iframe src="${emb}" title="Spotify-Player" width="100%" height="152" frameborder="0" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe></div>`;
+    else m.innerHTML = `<button type="button" class="f-mtoggle" data-fm="toggle"><span>♫</span><b>${login ? "Spotify verbinden" : "Playlist verbinden"}</b><span class="label">Spotify</span></button><div class="f-mplayer" hidden>${conn}<form class="exadd" data-fmusic="1"><input type="text" name="u" placeholder="Spotify-Link der Playlist" aria-label="Spotify-Link"><button class="btn sm rad" type="submit">Speichern</button></form><span class="label" style="letter-spacing:.06em">${login ? "Oder nur" : "In Spotify:"} Playlist → Teilen → Link kopieren.</span></div>`;
+  }
+  async function spRefresh() { if (!F) return; await spState(); if (F) musicBar(); }
+  async function spAction(a) {
+    const st = SPOT.st || {};
+    if (a === "lists") {
+      spListOpen = !spListOpen; const m = document.getElementById("fmusic"), L = m && m.querySelector(".f-splists"); if (!L) return;
+      L.hidden = !spListOpen; if (!spListOpen) return;
+      if (!L.childElementCount) L.innerHTML = '<span class="label">Playlists laden…</span>';
+      const ls = await spLists();
+      L.innerHTML = ls.length ? ls.map((p) => `<button type="button" class="f-spl" data-fspl="${esc(p.uri)}"><i style="${p.image ? `background-image:url('${esc(p.image).replace(/'/g, "")}')` : ""}"></i><span>${esc(p.name)}</span></button>`).join("") : '<span class="label">Keine Playlists gefunden</span>';
+      return;
+    }
+    const action = a === "toggle" ? (st.playing ? "pause" : "play") : a;
+    if (a === "toggle" && SPOT.st) { SPOT.st.playing = !st.playing; musicBar(); }
+    const ok = await spCmd(action);
+    if (!ok) { await spState(); musicBar(); return; }
+    setTimeout(spRefresh, 700);
   }
   function open() {
     const f = el(); fc(); f.hidden = false; document.body.classList.add("focus-open"); musicBar();
     f.dataset.cat = F.cat; f.dataset.intro = "1"; setTimeout(() => { f.dataset.intro = "0"; }, 2800); keepAwake(); draw();
     clearInterval(tick); tick = setInterval(onTick, 250);
+    clearInterval(spPoll); spListOpen = false; spRefresh(); spPoll = setInterval(() => { if (!document.hidden) spRefresh(); }, 5000);
   }
   function close(keep) {
-    clearInterval(tick); tick = null; releaseAwake();
+    clearInterval(tick); tick = null; releaseAwake(); clearInterval(spPoll); spPoll = null;
     if (!keep) { F = null; save(); }
     el().hidden = true; document.body.classList.remove("focus-open"); render();
   }
@@ -299,6 +338,8 @@ const Focus = (function () {
       const row = fs0.closest(".f-setrow"); row.classList.toggle("ok", on); fs0.setAttribute("aria-pressed", String(on)); fs0.textContent = on ? "✓" : String(i + 1);
       refreshProgress(); try { if (on && navigator.vibrate) navigator.vibrate(12); } catch (_) {} return;
     }
+    const sp = ev.target.closest("[data-fsp]"); if (sp) { spAction(sp.dataset.fsp); return; }
+    const spl = ev.target.closest("[data-fspl]"); if (spl) { spListOpen = false; spCmd("playlist", spl.dataset.fspl).then((ok) => { if (ok) toast("Playlist läuft"); setTimeout(spRefresh, 900); }); musicBar(); return; }
     const fm = ev.target.closest("[data-fm]"); if (fm) { const p = el().querySelector(".f-mplayer"); if (p) { p.hidden = !p.hidden; fm.classList.toggle("on", !p.hidden); } return; }
     const sg = ev.target.closest("[data-fsugg]"); if (sg) { sessionEx(F.date, F.key, sg.dataset.fsugg, "add"); F.addOpen = false; save(); draw(); const L = el().querySelector(".f-exlist"); if (L && L.lastElementChild) L.lastElementChild.scrollIntoView({ block: "center", behavior: "smooth" }); return; }
     const ss = ev.target.closest("[data-fsets]"); if (ss && !ss.disabled) { const n = Math.max(1, Math.min(10, +ss.dataset.cur + +ss.dataset.fsets)); setSetsN(F.date, F.key, ss.dataset.n, n); draw(); return; }
