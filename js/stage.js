@@ -95,7 +95,7 @@
       set(days) {
         days.forEach((d, i) => {
           const c = cols[i]; if (!c) return;
-          c.target = d.rest ? 0.06 : 0.12 + Math.min(1, d.min / 240) * 0.95;
+          c.target = d.rest ? 0.06 : d.cat === "bike" ? 0.85 : 0.7;
           const col = d.cat === "bike" ? C.rad : d.cat === "gym" ? C.kraft : 0x50545f;
           c.m.material.color.setHex(col);
           c.m.material.emissive.setHex(d.done ? col : 0x000000); c.m.material.emissiveIntensity = d.done ? 0.45 : 0;

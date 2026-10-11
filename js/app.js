@@ -102,7 +102,7 @@ function vHeute() {
      <div class="goals" style="grid-template-columns:1fr;gap:14px">
        ${goal("Rad", W.bikeN, 3, "Einheiten", "rad", (n) => n)}
        ${goal("Kraft", W.gymN, 4, "Einheiten", "kraft", (n) => n)}
-       ${goal("Zeit", W.total / 60, W.planned / 60, "h", "", (n) => fN(n, 1))}
+       ${goal("Gesamt", W.doneN, 7, "Einheiten", "", (n) => n)}
      </div></section>`;
   const next = upcoming(null, 3);
   const nextCard = `<section class="card span-6"><div class="card-h"><h3>Als Nächstes</h3><button class="btn sm" type="button" data-go="woche">Ganze Woche</button></div><div class="rows">${next.length ? next.map((x) => dayRow(x)).join("") : `<p class="empty">Nichts mehr geplant.</p>`}</div></section>`;
@@ -127,7 +127,7 @@ function lastNote(key, before) {
 }
 const logTxt = (e) => [e.kg ? fN(e.kg, 1) + " kg" : "", e.s && e.r ? e.s + "×" + e.r : e.r ? e.r + " Wdh." : ""].filter(Boolean).join(" · ");
 function exChecklist(day, s) {
-  const can = day.i === TI && S.dbOK;
+  const can = day.i === TI && S.dbOK, canPlan = S.dbOK && day.i >= TI && !(day.locked && day.i < TI);
   const log = (S.L[day.date] && S.L[day.date].key === s.key) ? S.L[day.date] : { ex: {} };
   const rm = log.removed || [], addl = log.extra || [];
   const list = s.ex.filter((e) => !rm.includes(e.n)).map((e) => ({ n: e.n, s: e.s, r: e.r }))
@@ -135,14 +135,14 @@ function exChecklist(day, s) {
     .concat(addl.filter((n) => !s.ex.some((e) => e.n === n)).map((n) => ({ n, s: s.key === "legs" ? 2 : 3, r: "6–8", added: true })));
   const on = new Set(S.C[day.date] && S.C[day.date].key === s.key ? S.C[day.date].ex : []);
   const n = list.filter((e) => on.has(e.n)).length;
-  const addForm = can ? `<form class="exadd" data-sessadd="${day.date}" data-k="${s.key}"><input type="text" name="n" placeholder="Übung für dieses Training hinzufügen" maxlength="40" autocomplete="off" required aria-label="Übung für dieses Training hinzufügen"><button class="btn sm kraft" type="submit">Hinzufügen</button></form>` : "";
+  const addForm = canPlan ? `<form class="exadd" data-sessadd="${day.date}" data-k="${s.key}"><input type="text" name="n" placeholder="Übung für dieses Training hinzufügen" maxlength="40" autocomplete="off" required aria-label="Übung für dieses Training hinzufügen"><button class="btn sm kraft" type="submit">Hinzufügen</button></form>` : "";
   if (!list.length) return `<p class="empty">Keine Übungen in diesem Training.</p>` + addForm;
   const ln = lastNote(s.key, day.date);
   const items = list.map((e) => {
     const L = log.ex[e.n] || {}, prev = lastLog(e.n, day.date), done = on.has(e.n);
     const plan = s.test ? "6 Wdh. Test" : e.s + "×" + e.r;
     return `<div class="exlog${done ? " on" : ""}${e.extra ? " extra" : ""}">
-      <button type="button" class="ex-h" data-ex="${esc(e.n)}" data-date="${day.date}" data-k="${s.key}" aria-pressed="${done}" ${can ? "" : "disabled"}><span class="box">✓</span><span class="nm">${esc(e.n)}</span><span class="sx">${e.extra ? "nachholen" : e.added ? "zusätzlich" : esc(plan)}</span></button>${can ? `<button type="button" class="ex-rm" data-exrm="${esc(e.n)}" data-date="${day.date}" data-k="${s.key}" aria-label="${esc(e.n)} aus diesem Training entfernen">✕</button>` : ""}
+      <button type="button" class="ex-h" data-ex="${esc(e.n)}" data-date="${day.date}" data-k="${s.key}" aria-pressed="${done}" ${can ? "" : "disabled"}><span class="box">✓</span><span class="nm">${esc(e.n)}</span><span class="sx">${e.extra ? "nachholen" : e.added ? "zusätzlich" : esc(plan)}</span></button>${canPlan ? `<button type="button" class="ex-rm" data-exrm="${esc(e.n)}" data-date="${day.date}" data-k="${s.key}" aria-label="${esc(e.n)} aus diesem Training entfernen">✕</button>` : ""}
       ${prev ? `<span class="prev">Zuletzt ${esc(logTxt(prev))} · ${DOW[(idx(prev.date) % 7 + 7) % 7]} ${dm(prev.date)}</span>` : ""}
       ${can ? `<div class="lg"><label><span>kg</span><input type="number" inputmode="decimal" step="0.5" min="0" max="500" value="${L.kg || ""}" placeholder="${prev && prev.kg ? fN(prev.kg, 1) : "–"}" data-log="kg" data-ex="${esc(e.n)}" data-date="${day.date}" data-k="${s.key}" aria-label="${esc(e.n)} Gewicht"></label>
         <label><span>Sätze</span><input type="number" inputmode="numeric" step="1" min="1" max="10" value="${L.s || ""}" placeholder="${s.test ? 1 : e.s}" data-log="s" data-ex="${esc(e.n)}" data-date="${day.date}" data-k="${s.key}" aria-label="${esc(e.n)} Sätze"></label>
@@ -151,11 +151,11 @@ function exChecklist(day, s) {
   }).join("");
   return `<div style="display:flex;flex-direction:column;gap:10px">
     ${ln ? `<div class="lastnote"><span class="label">Notiz vom letzten ${esc(s.title.replace("-Test", ""))} · ${dm(ln.date)}</span><p>${esc(ln.note)}</p></div>` : ""}
-    <div class="card-h"><span class="label">${can ? "Übungen eintragen" : "Übungen"}</span><span class="label num" style="color:${n === list.length ? "var(--done)" : "var(--muted)"}">${n}/${list.length}</span></div>
+    <div class="card-h"><span class="label">${can ? "Übungen eintragen" : canPlan ? "Übungen anpassen" : "Übungen"}</span><span class="label num" style="color:${n === list.length ? "var(--done)" : "var(--muted)"}">${n}/${list.length}</span></div>
     <div class="track"><i style="width:${Math.round((n / list.length) * 100)}%"></i></div>
     <div class="exlist">${items}</div>${addForm}
     ${can ? `<label class="note"><span class="label">Notiz zum Training</span><textarea rows="2" maxlength="600" placeholder="z. B. Schulter zwickt, nächstes Mal 2,5 kg mehr" data-note="${day.date}" data-k="${s.key}">${esc(log.note || "")}</textarea></label>
-    <span class="label" style="letter-spacing:.06em">Antippen hakt ab, Gewicht eintragen auch. ✕ entfernt eine Übung nur aus diesem Training, dauerhaft änderst du sie unter Kraft → Übungen.</span>` : log.note ? `<div class="lastnote"><span class="label">Notiz</span><p>${esc(log.note)}</p></div>` : ""}</div>`;
+    <span class="label" style="letter-spacing:.06em">Antippen hakt ab, Gewicht eintragen auch. ✕ entfernt eine Übung nur aus diesem Training, dauerhaft änderst du sie unter Kraft → Übungen.</span>` : canPlan ? `<span class="label" style="letter-spacing:.06em">Abhaken und Gewichte am Trainingstag. Hinzufügen und ✕ gelten nur für dieses Training.</span>` : log.note ? `<div class="lastnote"><span class="label">Notiz</span><p>${esc(log.note)}</p></div>` : ""}</div>`;
 }
 function logSess(day, s) { const lk = S.L[day.date] && S.L[day.date].key; return lk && GYM[lk] ? sess(lk, Math.max(0, Math.floor(day.i / 7))) : s; }
 function pseudoToday() { const d = (new Date(TODAY + "T12:00:00").getDay() + 6) % 7; return { i: TI, d, date: TODAY, extraEx: [], done: [], keys: [], e: {}, status: "free" }; }
@@ -174,7 +174,7 @@ function splitPicker(date, cur, q) {
 function logCard(day) {
   const lk = S.L[day.date] && S.L[day.date].key, w = Math.max(0, Math.floor(day.i / 7));
   return `<section class="card accent-kraft span-12"><div class="card-h"><h3>Heute Kraft trainiert?</h3><span class="label">${TI < 0 ? "Vor dem Planstart" : "Auch außerhalb des Plans"}</span></div>
-    ${splitPicker(day.date, lk, "Welche Einheit?")}${lk && GYM[lk] ? exChecklist(day, sess(lk, w)) : `<p class="empty">Wähl die Einheit, dann kannst du Übungen abhaken, Gewichte eintragen und Übungen hinzufügen oder entfernen.</p>`}</section>`;
+    ${splitPicker(day.date, lk || "push", "Welche Einheit?")}${exChecklist(day, sess(lk && GYM[lk] ? lk : "push", w))}</section>`;
 }
 const HOW = [["plan", "Wie geplant"], ["kuerzer", "Kürzer"], ["locker", "Lockerer"], ["haerter", "Härter"], ["anders", "Andere Einheit"]];
 const FEEL = [["frisch", "Frisch"], ["ok", "Okay"], ["muede", "Müde"], ["platt", "Platt"]];
@@ -202,10 +202,10 @@ function vWoche() {
     <div class="rows">${W.days.map((x) => dayRow(x)).join("")}</div>
     <p class="empty" style="font-size:.82rem">Tag antippen für Ruhetag, Einheit festlegen oder ohne Strava abhaken. Die Woche plant sich selbst neu, nach Beinen kommt nie Rad.</p></section>`;
   const sum = `<section class="card span-5"><div class="card-h"><h3>Fortschritt</h3><span class="label num">${W.doneN} / 7</span></div><div class="track"><i style="width:${Math.round((W.doneN / 7) * 100)}%"></i></div>
-    <div class="kpis" style="grid-template-columns:repeat(2,minmax(0,1fr))">${kpi("Rad", W.bikeN, "/3")}${kpi("Kraft", W.gymN, "/4")}${kpi("km", fN(W.km))}${kpi("Zeit", fH(W.total), " h")}</div></section>`;
-  const chart = `<section class="card span-12"><div class="card-h"><h3>Umfang pro Etappe</h3><div class="legend label"><span><i style="background:var(--violet)"></i>Ist</span><span><i style="border:1.5px dashed var(--muted)"></i>Plan</span></div></div>${weekChart(R.weeks.map((x) => ({ val: x.total, plan: x.planned })), { step: 120, tick: (v) => v / 60 + "h", grad: "gAll", aria: "Trainingsstunden je Etappe" })}</section>`;
+    <div class="kpis" style="grid-template-columns:repeat(2,minmax(0,1fr))">${kpi("Rad", W.bikeN, "/3")}${kpi("Kraft", W.gymN, "/4")}${kpi("Rad-km", fN(W.km))}${kpi("Höhenmeter", fN(W.hm))}</div></section>`;
+  const chart = `<section class="card span-12"><div class="card-h"><h3>Einheiten pro Etappe</h3><div class="legend label"><span><i style="background:var(--violet)"></i>Erledigt</span><span><i style="border:1.5px dashed var(--muted)"></i>Plan 7</span></div></div>${weekChart(R.weeks.map((x) => ({ val: x.doneN, plan: 7 })), { step: 1, min: 7, tick: (v) => (v % 2 ? "" : v), grad: "gAll", aria: "Erledigte Einheiten je Etappe" })}</section>`;
   return {
-    hero: `<span class="label">Etappe ${w + 1} · ${esc(PHASE[w])}</span><h1 class="xl">Woche</h1><p class="sub">${W.doneN} von 7 Einheiten · ${fH(W.total)} von ${fH(W.planned)} h</p>`,
+    hero: `<span class="label">Etappe ${w + 1} · ${esc(PHASE[w])}</span><h1 class="xl">Woche</h1><p class="sub">${W.doneN} von 7 Einheiten · Rad ${W.bikeN}/3 · Kraft ${W.gymN}/4</p>`,
     body: `<div class="span-12">${season}</div>` + adjustCard(W) + list + sum + chart,
   };
 }
@@ -223,7 +223,7 @@ function vRad() {
     body: `<div class="span-12 kpis">${kpi("Diese Woche", fN(W.km), " km", W.bikeN + " von 3 Ausfahrten")}${kpi("Rad-Zeit", fH(W.bikeMin), " h")}${kpi("Höhenmeter", fN(W.hm), " Hm")}${kpi("Längste", fH(W.maxRide), " h", "Ausfahrt der Woche")}</div>` +
       `<section class="card accent-rad span-7"><div class="card-h"><h3>Nächste Ausfahrten</h3><span class="label">3 pro Woche</span></div><div class="rows">${next.length ? next.map((x) => dayRow(x)).join("") : `<p class="empty">Keine Ausfahrt mehr geplant.</p>`}</div></section>` +
       `<section class="card span-5"><div class="card-h"><h3>Wattzonen</h3><span class="label">${S.ftp ? "FTP " + S.ftp + " W" : "% FTP"}</span></div><div class="zones">${zoneRows}</div><span class="label">Sweetspot ${fillW("{SS}")}</span></section>` +
-      `<section class="card span-12"><div class="card-h"><h3>Rad-Stunden pro Etappe</h3><div class="legend label"><span><i style="background:var(--rad)"></i>Ist</span><span><i style="border:1.5px dashed var(--muted)"></i>Plan</span></div></div>${weekChart(R.weeks.map((x) => ({ val: x.bikeMin, plan: ["int", "base", "long"].reduce((t, k) => t + sess(k, x.w).min, 0) })), { step: 120, tick: (v) => v / 60 + "h", grad: "gRad", aria: "Rad-Stunden je Etappe" })}</section>` +
+      `<section class="card span-12"><div class="card-h"><h3>Radeinheiten pro Etappe</h3><div class="legend label"><span><i style="background:var(--rad)"></i>Erledigt</span><span><i style="border:1.5px dashed var(--muted)"></i>Plan 3</span></div></div>${weekChart(R.weeks.map((x) => ({ val: x.bikeN, plan: 3 })), { step: 1, min: 3, tick: (v) => v, grad: "gRad", aria: "Radeinheiten je Etappe" })}</section>` +
       `<section class="card span-6"><div class="card-h"><h3>Ziele bis 31. Januar</h3></div><div class="goals" style="grid-template-columns:1fr">${goal("Rad-Kilometer", R.tot.km, 2000, "km", "rad")}${goal("Höhenmeter", R.tot.hm, 3000, "Hm", "violet")}${goal("FTP", S.ftp || 0, fg || 220, "W", "gold", (n) => (n ? fN(n) : "–"), ftpProg())}</div></section>` +
       `<section class="card span-6"><div class="card-h"><h3>Letzte Ausfahrten</h3></div>${recentList("bike", 6)}</section>`,
   };
@@ -270,7 +270,7 @@ function vErfolge() {
     body: `<section class="card span-7"><div class="card-h"><h3>Level ${lv + 1} · ${esc(LEVELS[lv][1])}</h3><span class="label num">${fN(R.xp)} XP</span></div><div class="track gold"><i style="width:${nx ? pct(R.xp - LEVELS[lv][0], nx[0] - LEVELS[lv][0]) : 100}%"></i></div><span class="label">${nx ? "Nächstes Level: " + esc(nx[1]) + " bei " + fN(nx[0]) + " XP" : "Höchstes Level erreicht"}</span>
         <div class="kpis" style="grid-template-columns:repeat(2,minmax(0,1fr))">${kpi("Winter Arc", arcDay, "/90")}${kpi("Wochen-Serie", R.wStreak, " Wo")}${kpi("Tage im Plan", R.dStreak)}${kpi("Plan-Quote", quota === null ? "–" : quota, quota === null ? "" : " %")}</div></section>` +
       `<section class="card span-5"><div class="card-h"><h3>Wochen-Challenges</h3><span class="label">${won} / 16</span></div><div style="font-size:1.1rem;font-weight:600">${esc(CH[cw].t)}</div><span class="label">Diese Woche · +150 XP</span><div class="chs">${R.weeks.map((w) => `<span class="${w.ch.won ? "won" : ""}${w.w === cw ? " now" : ""}" title="${esc(CH[w.w].t)}">${w.ch.won ? "✓" : w.w + 1}</span>`).join("")}</div></section>` +
-      `<section class="card span-12"><div class="card-h"><h3>Ziele bis 31. Januar</h3><span class="label">${Math.max(0, DAYS - Math.max(TI, 0))} Tage übrig</span></div><div class="goals">${goal("Rad-Kilometer", R.tot.km, 2000, "km", "rad")}${goal("Stunden", R.tot.min / 60, 150, "h", "")}${goal("Krafteinheiten", R.tot.gym, 64, "", "kraft")}${goal("Höhenmeter", R.tot.hm, 3000, "Hm", "violet")}${goal("FTP", S.ftp || 0, fg || 220, "W", "gold", (n) => (n ? fN(n) : "–"), ftpProg())}</div></section>` +
+      `<section class="card span-12"><div class="card-h"><h3>Ziele bis 31. Januar</h3><span class="label">${Math.max(0, DAYS - Math.max(TI, 0))} Tage übrig</span></div><div class="goals">${goal("Rad-Kilometer", R.tot.km, 2000, "km", "rad")}${goal("Einheiten", R.doneAll, 112, "", "", (n) => n)}${goal("Krafteinheiten", R.tot.gym, 64, "", "kraft")}${goal("Höhenmeter", R.tot.hm, 3000, "Hm", "violet")}${goal("FTP", S.ftp || 0, fg || 220, "W", "gold", (n) => (n ? fN(n) : "–"), ftpProg())}</div></section>` +
       `<section class="card span-12"><div class="card-h"><h3>Abzeichen</h3><span class="label">${got} / ${R.badges.length} · je +100 XP</span></div><div class="badges">${R.badges.map((b) => `<div class="badge${b.got ? " got" : ""}"><span class="medal">${esc(b.k)}</span><div style="min-width:0"><div class="bt">${esc(b.t)}</div><div class="bd">${esc(b.d)}</div></div></div>`).join("")}</div></section>` +
       `<section class="card span-7"><div class="card-h"><h3>Strava</h3></div>${account}</section>` +
       `<section class="card span-5"><div class="card-h"><h3>Ausgangslage</h3><span class="label">Ø pro Woche · 14.9.–11.10.</span></div>${S.live ? `<div class="kpis" style="grid-template-columns:repeat(2,minmax(0,1fr))">${kpi("Rad", fN(bk.reduce((t, a) => t + a.km, 0) / 4), " km")}${kpi("Rad-Zeit", fN(bk.reduce((t, a) => t + a.min, 0) / 240, 1), " h")}${kpi("Kraft", fN(base.filter((a) => a.cat === "gym").length / 4, 1), "×")}${kpi("Gesamt", fN(base.reduce((t, a) => t + a.min, 0) / 240, 1), " h")}</div>` : `<p class="empty">Erscheint, sobald Strava verbunden ist.</p>`}</section>`,
@@ -365,7 +365,7 @@ function render() {
   if (window.Stage) {
     const W = R.weeks[curW()], lv = levelOf(R.xp);
     Stage.update({
-      rings: [W.bikeN / 3, W.gymN / 4, W.planned ? W.total / W.planned : 0],
+      rings: [W.bikeN / 3, W.gymN / 4, W.doneN / 7],
       week: R.weeks[view === "woche" ? S.sel : curW()].days.map((x) => { const k = x.keys[0]; return { min: k ? sess(k, Math.floor(x.i / 7)).min : 0, cat: k ? CAT[k] : null, done: x.status === "done", rest: !k, today: x.i === TI }; }),
       level: { n: lv + 1, name: LEVELS[lv][1] },
       ftp: S.ftp || 0, ftpSub: S.ftp && S.weight ? fN(S.ftp / S.weight, 2) + " W/KG" : "WATT",
@@ -448,12 +448,15 @@ function openSheet(i) {
     <div class="optgrid"><button type="button" class="opt${cur === "auto" ? " on" : ""}" data-set="auto"><b>Automatisch</b><span>Plan entscheidet</span></button><button type="button" class="opt${cur === "rest" ? " on" : ""}" data-set="rest"><b>Ruhetag</b><span>Rest der Woche rückt nach</span></button></div>
     <span class="label">${past ? "Ohne Strava erledigt" : "Diese Einheit festlegen"}</span><div class="optgrid">${opts}</div>
     <span class="muted" style="font-size:.8rem">${past ? "Was in Strava steht, wird automatisch erkannt." : "Am Tag nach Beinen plant der Plan kein Rad. Festlegungen haben Vorrang."}</span>
-    ${past && x.done.length ? feedbackBlock(x, sess(x.done[0].k, w)) : ""}`;
+    ${past && x.done.length ? feedbackBlock(x, sess(x.done[0].k, w)) : ""}
+    ${(() => { const ss = sessOf(x); return ss && ss.cat === "gym" && x.i >= TI ? `<div class="sheet-ex">${exChecklist(x, logSess(x, ss))}</div>` : ""; })()}`;
   $("scrim").hidden = false;
 }
 function closeSheet() { $("scrim").hidden = true; sheetI = null; }
 $("scrim").addEventListener("click", (e) => {
   if (e.target === $("scrim") || e.target.closest("[data-close]")) { closeSheet(); return; }
+  const rmb = e.target.closest("[data-exrm]"); if (rmb) { const i = sheetI; sessionEx(rmb.dataset.date, rmb.dataset.k, rmb.dataset.exrm, "remove"); openSheet(i); return; }
+  const exb = e.target.closest("button[data-ex]"); if (exb && !exb.disabled) { const i = sheetI; toggleEx(exb.dataset.date, exb.dataset.k, exb.dataset.ex); openSheet(i); return; }
   const fbb = e.target.closest("[data-fb]"); if (fbb) { const i = sheetI; setFeedback(fbb.dataset.date, fbb.dataset.fb, fbb.dataset.val); openSheet(i); return; }
   const b = e.target.closest("[data-set]"); if (!b || sheetI === null) return;
   const v = b.dataset.set;
@@ -461,6 +464,8 @@ $("scrim").addEventListener("click", (e) => {
   closeSheet();
 });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("scrim").hidden) closeSheet(); });
+$("scrim").addEventListener("submit", (e) => { const f = e.target; e.preventDefault(); if (f.dataset.sessadd) { const i = sheetI; sessionEx(f.dataset.sessadd, f.dataset.k, f.elements.n.value, "add"); openSheet(i); } });
+$("scrim").addEventListener("change", (e) => { const lg = e.target.closest("[data-log]"); if (lg) setLog(lg.dataset.date, lg.dataset.k, lg.dataset.ex, lg.dataset.log, lg.value); const nt = e.target.closest("[data-note]"); if (nt) setNote(nt.dataset.note, nt.dataset.k, nt.value); });
 
 /* ---------- storage (browser for now) ---------- */
 let DB = null;

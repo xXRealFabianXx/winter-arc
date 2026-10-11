@@ -367,3 +367,5 @@ textarea:focus{outline:2px solid var(--kraft2);outline-offset:1px}
 
 /* iOS Safari zooms into inputs below 16px */
 input[type=text],input[type=number],textarea{font-size:16px}
+
+.sheet-ex{border-top:1px dashed var(--line-hi);padding-top:12px}
