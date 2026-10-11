@@ -60,7 +60,7 @@ const Focus = (function () {
   }
   function open() {
     const f = el(); f.hidden = false; document.body.classList.add("focus-open");
-    f.dataset.cat = F.cat; keepAwake(); draw();
+    f.dataset.cat = F.cat; f.dataset.intro = "1"; setTimeout(() => { f.dataset.intro = "0"; }, 2800); keepAwake(); draw();
     clearInterval(tick); tick = setInterval(onTick, 250);
   }
   function close(keep) {
@@ -160,42 +160,42 @@ const Focus = (function () {
   }
   function draw() {
     const f = el(); if (!F) return;
-    f.dataset.run = F.cat === "gym" ? (F.phase === "summary" ? "0" : "1") : F.runFrom ? "1" : "0";
+    f.dataset.run = "0";
     if (F.cat === "bike" && !F.free && F.segs && F.segs.length) { const e = bikeElapsed(); let t = 0, c = F.segs.length - 1; for (let i = 0; i < F.segs.length; i++) { if (e < t + F.segs[i].d) { c = i; break; } t += F.segs[i].d; } f.dataset.hard = F.segs[c].hard && F.runFrom ? "1" : "0"; } else f.dataset.hard = "0";
     if (F.cat === "bike") return drawBike(f);
     const { s, items } = list(), it = items[F.i];
     const dots = `<div class="f-dots">${items.map((x, i) => { const L = S.L[F.date], e = L && L.ex[x.n], n = e && e.sets ? e.sets.filter(Boolean).length : 0; return `<button type="button" class="f-dot${i === F.i ? " cur" : ""}${n ? " ok" : ""}" data-fj="${i}" aria-label="${esc(x.n)}"></button>`; }).join("")}</div>`;
-    if (F.phase === "summary" || !it) return drawSummary(f, s, items);
-    const sets = s.test ? 1 : it.s, v = setVals(it.n, F.set), last = lastLog(it.n, F.date);
-    const ln = lastNote(F.key, F.date);
-    if (F.phase === "rest") {
-      const nextIt = items[F.i], L2 = 2 * Math.PI * 88;
-      f.innerHTML = head(s.title, "Pause") + dots + `<div class="f-body rest">
-        <div class="f-ring"><svg viewBox="0 0 200 200" aria-hidden="true"><circle cx="100" cy="100" r="88" fill="none" stroke="var(--line-hi)" stroke-width="10"/><circle id="rring" cx="100" cy="100" r="88" fill="none" stroke="url(#fg)" stroke-width="10" stroke-linecap="round" stroke-dasharray="${L2.toFixed(1)}" stroke-dashoffset="0" transform="rotate(-90 100 100)"/><defs><linearGradient id="fg" x1="0" x2="1"><stop offset="0" stop-color="var(--kraft)"/><stop offset="1" stop-color="var(--kraft2)"/></linearGradient></defs></svg><span id="rtime" class="num">${mmss(F.restDur)}</span></div>
-        <div class="f-adj"><button type="button" class="btn" data-f="rest-">−15 s</button><button type="button" class="btn" data-f="rest+">+15 s</button></div>
-        <div class="f-next"><span class="label">Als Nächstes</span><b>${esc(nextIt.n)}</b><span>Satz ${F.set + 1} von ${s.test ? 1 : nextIt.s}${last && last.kg ? " · zuletzt " + fN(last.kg, 1) + " kg" : ""}</span></div>
-        <button type="button" class="btn primary f-cta" data-f="skip">Weiter</button></div>`;
-      onTick(); return;
-    }
-    f.innerHTML = head(s.title, "Übung " + (F.i + 1) + " von " + items.length) + dots + `<div class="f-session"><span class="f-ripple" aria-hidden="true"><i></i><i></i><i></i></span><span class="label">Im Training seit</span><b class="num" id="fsess">${mmss((Date.now() - F.started) / 1000)}</b></div><div class="f-body">
-      ${F.i === 0 && F.set === 0 && ln ? `<div class="lastnote"><span class="label">Notiz vom letzten Mal · ${dm(ln.date)}</span><p>${esc(ln.note)}</p></div>` : ""}
-      <div class="f-ex"><span class="label">${it.extra ? "Nachholen" : it.added ? "Zusätzlich" : s.test ? "Test · 6 saubere Wdh." : esc(it.s + " × " + it.r + " Wdh.")}</span><h2 class="xl">${esc(it.n)}</h2>
-        <div class="f-sets">${Array.from({ length: sets }, (_, k) => `<span class="${k < F.set ? "ok" : k === F.set ? "cur" : ""}">${k + 1}</span>`).join("")}</div>
-        <span class="f-last">${last ? "Zuletzt " + esc(logTxt(last)) + " · " + dm(last.date) : "Erstes Mal: Gewicht wählen, mit dem " + (s.test ? "6" : esc(it.r)) + " saubere Wdh. gehen"}</span></div>
-      ${setTable(it, sets, last)}
-      <button type="button" class="btn kraft f-cta" data-f="set">${nextLabel(it, sets, items)}</button>
-      <div class="f-nav"><button type="button" class="btn" data-f="prev" ${F.i === 0 ? "disabled" : ""}>‹ Übung zurück</button><button type="button" class="btn" data-f="next">${F.i + 1 < items.length ? "Übung überspringen ›" : "Zum Abschluss ›"}</button></div>
+    if (F.phase === "summary") return drawSummary(f, s, items);
+    const st = f.scrollTop, ln = lastNote(F.key, F.date);
+    let tot = 0, dn = 0;
+    const cards = items.map((x) => {
+      const sets = s.test ? 1 : x.s, last = lastLog(x.n, F.date);
+      for (let i = 0; i < sets; i++) { tot++; const z = setOf(x.n, i); if (z && z.done) dn++; }
+      const tag = x.extra ? "Nachholen · " : x.added ? "Zusätzlich · " : "";
+      return `<section class="f-excard" data-sort-id="${esc(x.n)}"><div class="f-exh"><span class="grip" role="button" tabindex="0" aria-label="${esc(x.n)} verschieben: festhalten und ziehen">⠿</span>
+        <div class="f-exn"><b>${esc(x.n)}</b><span class="label">${tag}${s.test ? "Test · 6 saubere Wdh." : esc(sets + " × " + x.r + " Wdh.")}${last ? " · zuletzt " + esc(logTxt(last)) : ""}</span></div>
+        <button type="button" class="f-rm" data-frm="${esc(x.n)}" aria-label="${esc(x.n)} aus diesem Training entfernen">✕</button></div>${setTable(x, sets, last)}</section>`;
+    }).join("");
+    f.innerHTML = head(s.title, s.test ? "Testtraining" : "Krafttraining") + `<div class="f-session calm"><div><span class="label">Im Training seit</span><b class="num" id="fsess">${mmss((Date.now() - F.started) / 1000)}</b></div><div class="f-prog"><span class="label">Sätze</span><b class="num" id="fprog">${dn}/${tot}</b></div></div>
+      <div class="f-body">
+      ${ln ? `<div class="lastnote"><span class="label">Notiz vom letzten Mal · ${dm(ln.date)}</span><p>${esc(ln.note)}</p></div>` : ""}
+      <div class="f-exlist" data-sort="sess|${F.date}|${F.key}">${cards || `<p class="empty">Keine Übungen. Füg unten welche hinzu.</p>`}</div>
+      <form class="exadd" data-fadd="1"><input type="text" name="n" placeholder="Übung hinzufügen" maxlength="40" autocomplete="off" required aria-label="Übung zu diesem Training hinzufügen"><button class="btn sm kraft" type="submit">Hinzufügen</button></form>
+      <span class="label" style="letter-spacing:.06em">Kreis antippen hakt den Satz ab. Gewicht und Wiederholungen sind optional, trag sie ein, wann du willst. Reihenfolge am Griff ⠿ ändern.</span>
+      <button type="button" class="btn kraft f-cta" data-f="summary">Training abschließen</button>
       <button type="button" class="btn ghost-danger" data-f="reset" data-label="Training verwerfen">Training verwerfen</button></div>`;
+    f.scrollTop = st;
   }
+  function refreshProgress() { const f = el(); let tot = 0, dn = 0; f.querySelectorAll(".f-exlist .f-setrow").forEach((r) => { tot++; if (r.classList.contains("ok")) dn++; }); const p = document.getElementById("fprog"); if (p) p.textContent = dn + "/" + tot; }
   function setTable(it, sets, last) {
     const rows = Array.from({ length: sets }, (_, i) => {
       const v = setOf(it.n, i) || {}, ls = last && last.sets && last.sets[i];
-      const phKg = ls && ls.kg ? fN(ls.kg, 1) : last && last.kg ? fN(last.kg, 1) : "kg", phR = ls && ls.r ? ls.r : last && last.r ? last.r : targetReps(it.r);
-      return `<div class="f-setrow${v.done ? " ok" : ""}"><button type="button" class="f-chk" data-fset="${i}" aria-pressed="${!!v.done}" aria-label="Satz ${i + 1} ${v.done ? "offen setzen" : "abhaken"}">${v.done ? "✓" : i + 1}</button>
+      const phKg = ls && ls.kg ? fN(ls.kg, 1) : last && last.kg ? fN(last.kg, 1) : "–", phR = ls && ls.r ? ls.r : last && last.r ? last.r : targetReps(it.r);
+      return `<div class="f-setrow${v.done ? " ok" : ""}"><button type="button" class="f-chk" data-fset="${i}" data-n="${esc(it.n)}" aria-pressed="${!!v.done}" aria-label="Satz ${i + 1} ${v.done ? "offen setzen" : "abhaken"}">${v.done ? "✓" : i + 1}</button>
         <label><input type="number" inputmode="decimal" step="0.5" min="0" value="${v.kg || ""}" placeholder="${phKg}" data-fin data-n="${esc(it.n)}" data-si="${i}" data-fk="kg" aria-label="Satz ${i + 1} Gewicht"><span>kg</span></label>
         <label><input type="number" inputmode="numeric" step="1" min="0" value="${v.r || ""}" placeholder="${phR}" data-fin data-n="${esc(it.n)}" data-si="${i}" data-fk="r" aria-label="Satz ${i + 1} Wiederholungen"><span>Wdh.</span></label></div>`;
     }).join("");
-    return `<div class="f-settable"><div class="f-sethead"><span class="label">Sätze</span><span class="label">Werte optional, jederzeit eintragbar</span></div>${rows}</div>`;
+    return `<div class="f-settable">${rows}</div>`;
   }
   function nextLabel(it, sets, items) {
     let i = 0; while (i < sets && setOf(it.n, i) && setOf(it.n, i).done) i++;
@@ -205,22 +205,20 @@ const Focus = (function () {
   function drawSummary(f, s, items) {
     const L = S.L[F.date] || { ex: {} }; let vol = 0, setsN = 0;
     const rows = items.map((x) => {
-      const e = L.ex[x.n], sets = s.test ? 1 : x.s, last = lastLog(x.n, F.date);
-      for (let i = 0; i < sets; i++) { const z = e && e.sets && e.sets[i]; if (z && (z.done || z.kg || z.r)) { vol += (z.kg || 0) * (z.r || 0); setsN++; } }
-      const any = e && e.sets && e.sets.some((z) => z && (z.done || z.kg || z.r));
-      return `<details class="f-sumex"${any ? "" : ""}><summary><span>${esc(x.n)}</span><span class="num">${any ? e.sets.filter(Boolean).map((z) => (z.kg ? fN(z.kg, 1) : "–") + "×" + (z.r || "–")).join("  ") : "nichts eingetragen"}</span></summary>${setTable(x, sets, last)}</details>`;
+      const e = L.ex[x.n], ss = e && e.sets ? e.sets.filter((z) => z && (z.done || z.kg || z.r)) : [];
+      ss.forEach((z) => { vol += (z.kg || 0) * (z.r || 0); setsN++; });
+      return `<li><span>${esc(x.n)}</span><span class="num">${ss.length ? ss.map((z) => (z.kg ? fN(z.kg, 1) : "–") + "×" + (z.r || "–")).join("  ") : "ausgelassen"}</span></li>`;
     }).join("");
     const mins = Math.round((Date.now() - F.started) / 60000);
-    f.innerHTML = head(s.title, "Geschafft") + `<div class="f-body sum">
+    f.innerHTML = head(s.title, "Abschluss") + `<div class="f-body sum">
       <h2 class="xl grad-done">Stark.</h2>
       <div class="kpis" style="grid-template-columns:repeat(3,minmax(0,1fr))"><div class="kpi"><span class="label">Sätze</span><span class="v num">${setsN}</span></div><div class="kpi"><span class="label">Bewegt</span><span class="v num">${fN(vol / 1000, 1)}<small>t</small></span></div><div class="kpi"><span class="label">Dauer</span><span class="v num">${mins}<small>min</small></span></div></div>
-      <div class="f-sumlist"><span class="label">Werte nachtragen: Übung antippen</span>${rows}</div>
+      <ul class="f-sum">${rows}</ul>
       <label class="note"><span class="label">Notiz zum Training</span><textarea rows="3" maxlength="600" placeholder="Wie lief's? Was nächstes Mal ändern?" data-note="${F.date}" data-k="${F.key}">${esc(L.note || "")}</textarea></label>
       ${feedbackBlock(dayFor(F.date), s)}
       <button type="button" class="btn kraft f-cta" data-f="finish">Training beenden</button>
-      <button type="button" class="btn" data-f="back">Zurück zu den Übungen</button>
-      <button type="button" class="btn ghost-danger" data-f="reset" data-label="Training verwerfen">Training verwerfen</button>
-      <span class="label" style="letter-spacing:.06em">Gezählt wird das Training über Strava. Zeichnest du es nicht auf, trag es unter Heute mit „Erledigt“ ein.</span></div>`;
+      <button type="button" class="btn" data-f="back">Zurück zur Übersicht</button>
+      <button type="button" class="btn ghost-danger" data-f="reset" data-label="Training verwerfen">Training verwerfen</button></div>`;
   }
   function drawFree(f) {
     const e = bikeElapsed(), s = sessFor(F.date, "free");
@@ -277,6 +275,13 @@ const Focus = (function () {
     const f = el(); if (!f || f.hidden || !f.contains(ev.target)) return;
     const fb = ev.target.closest("[data-fb]"); if (fb) { setFeedback(fb.dataset.date, fb.dataset.fb, fb.dataset.val); draw(); return; }
     const j = ev.target.closest("[data-fj]"); if (j) { jump(+j.dataset.fj); return; }
+    const fs0 = ev.target.closest("[data-fset][data-n]"); if (fs0 && F && F.cat === "gym" && F.phase !== "summary") {
+      const name = fs0.dataset.n, i = +fs0.dataset.fset, cur = setOf(name, i), on = !(cur && cur.done);
+      writeSet(name, i, { done: on });
+      const row = fs0.closest(".f-setrow"); row.classList.toggle("ok", on); fs0.setAttribute("aria-pressed", String(on)); fs0.textContent = on ? "✓" : String(i + 1);
+      refreshProgress(); try { if (on && navigator.vibrate) navigator.vibrate(12); } catch (_) {} return;
+    }
+    const rmx = ev.target.closest("[data-frm]"); if (rmx) { sessionEx(F.date, F.key, rmx.dataset.frm, "remove"); draw(); return; }
     const fs = ev.target.closest("[data-fset]"); if (fs) { const box = fs.closest(".f-sumex"); if (box) { const name = box.querySelector("summary span").textContent; const cur = setOf(name, +fs.dataset.fset); writeSet(name, +fs.dataset.fset, { done: !(cur && cur.done) }); const open = [...el().querySelectorAll(".f-sumex")].map((d) => d.open); draw(); el().querySelectorAll(".f-sumex").forEach((d, k) => { d.open = open[k]; }); } else toggleSet(+fs.dataset.fset); return; }
     const b = ev.target.closest("[data-f]"); if (!b || b.disabled) return;
     const a = b.dataset.f, kg = document.getElementById("fkg"), rp = document.getElementById("freps");
@@ -284,6 +289,7 @@ const Focus = (function () {
     else if (a === "kg-" || a === "kg+") { const v = (parseFloat(String(kg.value).replace(",", ".")) || 0) + (a === "kg+" ? 2.5 : -2.5); kg.value = Math.max(0, v); }
     else if (a === "r-" || a === "r+") { rp.value = Math.max(0, (parseInt(rp.value, 10) || 0) + (a === "r+" ? 1 : -1)); }
     else if (a === "set") doneSet();
+    else if (a === "summary") { F.phase = "summary"; save(); draw(); el().scrollTop = 0; }
     else if (a === "skip") { F.phase = "go"; save(); draw(); }
     else if (a === "rest-" || a === "rest+") { const d = a === "rest+" ? 15 : -15; F.restDur = Math.max(15, F.restDur + d); F.restEnd += d * 1000; save(); onTick(); }
     else if (a === "prev") jump(F.i - 1);
@@ -304,11 +310,12 @@ const Focus = (function () {
     }
     else if (a === "reset") confirmReset(b, F.date);
   });
+  document.addEventListener("submit", (ev) => { const f = el(); if (!f || f.hidden || !f.contains(ev.target)) return; const fm = ev.target; if (fm.dataset.fadd) { ev.preventDefault(); sessionEx(F.date, F.key, fm.elements.n.value, "add"); draw(); const L = el().querySelector(".f-exlist"); if (L && L.lastElementChild) L.lastElementChild.scrollIntoView({ block: "center" }); } });
   document.addEventListener("change", (ev) => { const f = el(); if (!f || f.hidden || !f.contains(ev.target)) return; const fi = ev.target.closest("[data-fin]"); if (fi) { onSetInput(fi); return; } const nt = ev.target.closest("[data-note]"); if (nt) setNote(nt.dataset.note, nt.dataset.k, nt.value); });
   document.addEventListener("visibilitychange", () => { if (!document.hidden && F && !el().hidden) { keepAwake(); onTick(); } });
   setInterval(() => { if (!F) return; const t = mmss((Date.now() - F.started) / 1000); const c = document.getElementById("fclock"); if (c) c.textContent = t; const s2 = document.getElementById("fsess"); if (s2) s2.textContent = t; }, 1000);
 
   /* resume after a reload */
   function resume() { const l = loadLive(); if (l && l.date === TODAY) { F = l; open(); } else if (l) { try { localStorage.removeItem(LK); } catch (_) {} } }
-  return { start, isLive, resume, confirmReset };
+  return { start, isLive, resume, confirmReset, redraw: () => { if (F && !el().hidden) draw(); } };
 })();

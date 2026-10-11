@@ -444,6 +444,7 @@ function saveOrder(spec, ids) {
     const L = EXC[a]; L.sort((x, y) => ids.indexOf(x.n) - ids.indexOf(y.n)); saveCfg("ex", EXC);
   } else if (kind === "sess") { const L = logOf(a, b); L.order = ids; saveLog(a); }
   render(); if (!$("scrim").hidden && sheetI !== null) openSheet(sheetI);
+  Focus.redraw();
   toast("Reihenfolge gespeichert");
 }
 (function () {
@@ -463,7 +464,8 @@ function saveOrder(spec, ids) {
     if (next && next.dataset.sortId !== undefined && dy > next.offsetHeight / 2) { list.insertBefore(next, item); drag.y0 += next.offsetHeight + gap; dy = e.clientY - drag.y0; }
     else if (prev && prev.dataset.sortId !== undefined && dy < -prev.offsetHeight / 2) { list.insertBefore(item, prev); drag.y0 -= prev.offsetHeight + gap; dy = e.clientY - drag.y0; }
     item.style.transform = `translateY(${dy}px)`;
-    if (e.clientY < 90) window.scrollBy(0, -12); else if (e.clientY > window.innerHeight - 110) window.scrollBy(0, 12);
+    const sc = document.body.classList.contains("focus-open") ? $("focus") : window;
+    if (e.clientY < 90) sc.scrollBy(0, -12); else if (e.clientY > window.innerHeight - 110) sc.scrollBy(0, 12);
   });
   const end = (e) => {
     if (!drag || (e && e.pointerId !== drag.id)) return;
