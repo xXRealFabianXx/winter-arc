@@ -476,3 +476,6 @@ body.focus-open{overflow:hidden}
 @media (prefers-reduced-motion:reduce){.focus::before,.focus::after,.f-ripple i,#fsess,.f-big,.f-cta,.f-sets span.cur{animation:none!important}}
 .f-session{background:color-mix(in srgb,var(--card) 55%,transparent)}
 .f-ripple i{border-width:2.5px}
+
+.btn.ghost-danger{background:transparent;border-color:color-mix(in srgb,var(--bad) 40%,transparent);color:var(--bad)}
+.btn.ghost-danger.danger{background:var(--bad);color:#fff;border-color:var(--bad)}

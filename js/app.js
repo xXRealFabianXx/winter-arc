@@ -91,6 +91,7 @@ function vHeute() {
     }
     let a = "";
     if (isToday && k) { const ls = s.cat === "gym" ? logSess(day, s) : s; a += `<button class="btn ${s.cat === "bike" ? "rad" : "kraft"} start" type="button" data-start="${ls.key}" data-date="${day.date}">${Focus.isLive(day.date) ? "▶ Training fortsetzen" : "▶ Training starten"}</button>`; }
+    if (isToday && Focus.isLive(day.date)) a += `<button class="btn ghost-danger" type="button" data-discard="${day.date}" data-label="Training verwerfen">Training verwerfen</button>`;
     if (isToday && (!s || s.cat === "bike" || day.status === "rest")) a += `<button class="btn" type="button" data-start="free" data-date="${day.date}">Einfach fahren</button>`;
     if (isToday && day.status !== "done" && k) a += `<button class="btn" type="button" data-act="manual" data-k="${k}" ${canWrite ? "" : "disabled"}>✓ Erledigt</button>`;
     if (day.status !== "done") a += `<button class="btn" type="button" data-act="${day.e.rest ? "auto" : "rest"}" ${canWrite ? "" : "disabled"}>${day.e.rest ? "Ruhetag aufheben" : "Ruhetag"}</button>`;
@@ -163,6 +164,7 @@ function exChecklist(day, s) {
     <div class="card-h"><span class="label">${can ? "Übungen eintragen" : canPlan ? "Übungen anpassen" : "Übungen"}</span><span class="label num" style="color:${n === list.length ? "var(--done)" : "var(--muted)"}">${n}/${list.length}</span></div>
     <div class="track"><i style="width:${Math.round((n / list.length) * 100)}%"></i></div>
     <div class="exlist"${canPlan ? ` data-sort="sess|${day.date}|${s.key}"` : ""}>${items}</div>${addForm}
+    ${can && (Object.keys(log.ex || {}).length || on.size) && !Focus.isLive(day.date) ? `<button type="button" class="btn ghost-danger sm" data-clearday="${day.date}" data-label="Einträge dieses Trainings löschen">Einträge dieses Trainings löschen</button>` : ""}
     ${can ? `<label class="note"><span class="label">Notiz zum Training</span><textarea rows="2" maxlength="600" placeholder="z. B. Schulter zwickt, nächstes Mal 2,5 kg mehr" data-note="${day.date}" data-k="${s.key}">${esc(log.note || "")}</textarea></label>
     <span class="label" style="letter-spacing:.06em">Antippen hakt ab, Gewicht eintragen auch. ✕ entfernt eine Übung nur aus diesem Training, dauerhaft änderst du sie unter Kraft → Übungen.</span>` : canPlan ? `<span class="label" style="letter-spacing:.06em">Abhaken und Gewichte am Trainingstag. Hinzufügen und ✕ gelten nur für dieses Training.</span>` : log.note ? `<div class="lastnote"><span class="label">Notiz</span><p>${esc(log.note)}</p></div>` : ""}</div>`;
 }
@@ -183,7 +185,7 @@ function splitPicker(date, cur, q) {
 function logCard(day) {
   const lk = S.L[day.date] && S.L[day.date].key, w = Math.max(0, Math.floor(day.i / 7));
   return `<section class="card accent-kraft span-12"><div class="card-h"><h3>Heute Kraft trainiert?</h3><span class="label">${TI < 0 ? "Vor dem Planstart" : "Auch außerhalb des Plans"}</span></div>
-    ${splitPicker(day.date, lk || "push", "Welche Einheit?")}<div class="btns"><button class="btn kraft start" type="button" data-start="${lk && GYM[lk] ? lk : "push"}" data-date="${day.date}">${Focus.isLive(day.date) ? "▶ Training fortsetzen" : "▶ Training starten"}</button><button class="btn" type="button" data-start="free" data-date="${day.date}">Oder einfach Rad fahren</button></div>${exChecklist(day, sess(lk && GYM[lk] ? lk : "push", w))}</section>`;
+    ${splitPicker(day.date, lk || "push", "Welche Einheit?")}<div class="btns"><button class="btn kraft start" type="button" data-start="${lk && GYM[lk] ? lk : "push"}" data-date="${day.date}">${Focus.isLive(day.date) ? "▶ Training fortsetzen" : "▶ Training starten"}</button>${Focus.isLive(day.date) ? `<button class="btn ghost-danger" type="button" data-discard="${day.date}" data-label="Training verwerfen">Training verwerfen</button>` : `<button class="btn" type="button" data-start="free" data-date="${day.date}">Oder einfach Rad fahren</button>`}</div>${exChecklist(day, sess(lk && GYM[lk] ? lk : "push", w))}</section>`;
 }
 const HOW = [["plan", "Wie geplant"], ["kuerzer", "Kürzer"], ["locker", "Lockerer"], ["haerter", "Härter"], ["anders", "Andere Einheit"]];
 const FEEL = [["frisch", "Frisch"], ["ok", "Okay"], ["muede", "Müde"], ["platt", "Platt"]];
@@ -401,6 +403,8 @@ $("main").addEventListener("click", (e) => {
   const ed = t.closest("[data-exed]"); if (ed && !ed.disabled) { editEx(ed.dataset.exed, ed.dataset.k, +ed.dataset.n, +ed.dataset.d || 0); return; }
   const kt = t.closest("[data-ktab]"); if (kt) { kraftTab = kt.dataset.ktab; render(); return; }
   const rd = t.closest("[data-round]"); if (rd) { testRound = +rd.dataset.round; render(); return; }
+  const dsc = t.closest("[data-discard]"); if (dsc) { Focus.confirmReset(dsc, dsc.dataset.discard); return; }
+  const clr = t.closest("[data-clearday]"); if (clr) { confirmClear(clr, clr.dataset.clearday); return; }
   const st = t.closest("[data-start]"); if (st) { Focus.start(st.dataset.date, st.dataset.start); return; }
   const chg = t.closest("[data-change]"); if (chg) { const v = chg.dataset.change; writeEntry(chg.dataset.date, v === "auto" ? null : v === "rest" ? { rest: true } : { pin: v }); return; }
   const lkb = t.closest("[data-logkey]"); if (lkb) { setLogKey(lkb.dataset.date, lkb.dataset.logkey); return; }
@@ -583,6 +587,19 @@ function sessionEx(date, key, name, act) {
     toast(name + " aus diesem Training entfernt");
   }
   saveLog(date); render();
+}
+let clearArmed = 0;
+function confirmClear(btn, date) {
+  if (clearArmed && Date.now() - clearArmed < 4000) {
+    clearArmed = 0;
+    const keep = S.L[date] ? { key: S.L[date].key, ex: {}, note: "", extra: S.L[date].extra || [], removed: S.L[date].removed || [], order: S.L[date].order || [] } : null;
+    if (keep && (keep.extra.length || keep.removed.length || keep.order.length)) { S.L[date] = keep; DB.doc("logs/" + date).set(keep).catch(() => {}); } else { delete S.L[date]; DB.doc("logs/" + date).delete().catch(() => {}); }
+    delete S.C[date]; DB.doc("checks/" + date).delete().catch(() => {});
+    delete S.F[date]; DB.doc("fb/" + date).delete().catch(() => {});
+    render(); toast("Einträge gelöscht"); return;
+  }
+  clearArmed = Date.now(); btn.textContent = "Wirklich löschen?"; btn.classList.add("danger");
+  setTimeout(() => { if (btn.isConnected && Date.now() - clearArmed >= 4000) { btn.textContent = btn.dataset.label; btn.classList.remove("danger"); } }, 4100);
 }
 function setNote(date, key, txt) { if (!DB) return; const L = logOf(date, key); L.note = String(txt || "").trim(); saveLog(date); toast(L.note ? "Notiz gespeichert" : "Notiz gelöscht"); }
 function saveCfg(key, val) { if (!DB) return; const ref = DB.doc("cfg/" + key); (val ? ref.set(val) : ref.delete()).catch(() => {}); }

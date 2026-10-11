@@ -50,7 +50,9 @@ const Focus = (function () {
     if (live && live.date === date && live.key === key) { F = live; if (F.phase === "rest") F.phase = "go"; }
     else {
       const s = sessFor(date, key);
-      F = { date, key, cat: key === "free" ? "bike" : CAT[key], free: key === "free", laps: [], phase: "go", started: Date.now(), i: 0, set: 0, restEnd: 0, restDur: 90, elapsed: 0, runFrom: 0 };
+      const clone = (o) => (o === undefined || o === null ? null : JSON.parse(JSON.stringify(o)));
+      const snap = { L: clone(S.L[date]), C: clone(S.C[date]), F: clone(S.F[date]) };
+      F = { snap, date, key, cat: key === "free" ? "bike" : CAT[key], free: key === "free", laps: [], phase: "go", started: Date.now(), i: 0, set: 0, restEnd: 0, restDur: 90, elapsed: 0, runFrom: 0 };
       if (F.cat === "gym" && !(S.L[date] && S.L[date].key === key)) { logOf(date, key); saveLog(date); }
       if (F.cat === "bike") F.segs = F.free ? [] : bikeSegments(s);
     }
@@ -65,6 +67,23 @@ const Focus = (function () {
     clearInterval(tick); tick = null; releaseAwake();
     if (!keep) { F = null; save(); }
     el().hidden = true; document.body.classList.remove("focus-open"); render();
+  }
+  /* discard the session: restore what was there before it started (or clear the day if unknown) */
+  let armed = 0;
+  function reset(date) {
+    const live = F && F.date === date ? F : loadLive(); if (!live || live.date !== date) return;
+    const snap = live.snap || { L: null, C: null, F: null };
+    [["L", "logs"], ["C", "checks"], ["F", "fb"]].forEach(([k, col]) => {
+      const v = snap[k];
+      if (v) { S[k][date] = v; DB.doc(col + "/" + date).set(v).catch(() => {}); }
+      else { delete S[k][date]; DB.doc(col + "/" + date).delete().catch(() => {}); }
+    });
+    F = live; close(false); toast("Training verworfen");
+  }
+  function confirmReset(btn, date) {
+    if (armed && Date.now() - armed < 4000) { armed = 0; reset(date); return; }
+    armed = Date.now(); if (btn) { btn.textContent = "Wirklich verwerfen?"; btn.classList.add("danger"); }
+    setTimeout(() => { if (armed && Date.now() - armed >= 4000) { armed = 0; if (btn && btn.isConnected) { btn.textContent = btn.dataset.label || "Training verwerfen"; btn.classList.remove("danger"); } } }, 4100);
   }
   function isLive(date) { const l = loadLive(); return !!(l && l.date === date); }
 
@@ -157,7 +176,8 @@ const Focus = (function () {
         <div class="f-step"><span class="label">Wiederholungen</span><div><button type="button" data-f="r-" aria-label="Eine Wiederholung weniger">−</button><input id="freps" type="number" inputmode="numeric" step="1" min="0" value="${v.r || targetReps(s.test ? "6" : it.r)}" aria-label="Wiederholungen"><button type="button" data-f="r+" aria-label="Eine Wiederholung mehr">+</button></div><span class="unit">Wdh.</span></div>
       </div>
       <button type="button" class="btn kraft f-cta" data-f="set">Satz ${F.set + 1} fertig</button>
-      <div class="f-nav"><button type="button" class="btn" data-f="prev" ${F.i === 0 ? "disabled" : ""}>‹ Übung zurück</button><button type="button" class="btn" data-f="next">${F.i + 1 < items.length ? "Übung überspringen ›" : "Zum Abschluss ›"}</button></div></div>`;
+      <div class="f-nav"><button type="button" class="btn" data-f="prev" ${F.i === 0 ? "disabled" : ""}>‹ Übung zurück</button><button type="button" class="btn" data-f="next">${F.i + 1 < items.length ? "Übung überspringen ›" : "Zum Abschluss ›"}</button></div>
+      <button type="button" class="btn ghost-danger" data-f="reset" data-label="Training verwerfen">Training verwerfen</button></div>`;
   }
   function drawSummary(f, s, items) {
     const L = S.L[F.date] || { ex: {} }; let vol = 0, setsN = 0;
@@ -171,6 +191,7 @@ const Focus = (function () {
       ${feedbackBlock(dayFor(F.date), s)}
       <button type="button" class="btn kraft f-cta" data-f="finish">Training beenden</button>
       <button type="button" class="btn" data-f="back">Zurück zu den Übungen</button>
+      <button type="button" class="btn ghost-danger" data-f="reset" data-label="Training verwerfen">Training verwerfen</button>
       <span class="label" style="letter-spacing:.06em">Gezählt wird das Training über Strava. Zeichnest du es nicht auf, trag es unter Heute mit „Erledigt“ ein.</span></div>`;
   }
   function drawFree(f) {
@@ -192,7 +213,8 @@ const Focus = (function () {
       <div class="f-adj"><button type="button" class="btn ${F.runFrom ? "" : "rad"} f-play" data-f="play">${F.runFrom ? "Pause" : F.phase === "go" ? "▶ Start" : "▶ Weiter"}</button><button type="button" class="btn" data-f="lap" ${F.runFrom ? "" : "disabled"}>Runde</button></div>
       <div class="f-zones">${zones.map((z) => `<div><span class="label">${z[0]} · ${z[1]}</span><b class="num">${esc(fillW(z[2]))}</b></div>`).join("")}</div>
       ${F.laps.length ? `<ul class="f-sum">${F.laps.slice().reverse().slice(0, 5).map((x, j) => { const i = F.laps.length - 1 - j; return `<li><span>Runde ${i + 1}</span><span class="num">${mmss(x - (i ? F.laps[i - 1] : 0))}</span></li>`; }).join("")}</ul>` : ""}
-      <button type="button" class="btn" data-f="end">Fahrt beenden</button></div>`;
+      <button type="button" class="btn" data-f="end">Fahrt beenden</button>
+      <button type="button" class="btn ghost-danger" data-f="reset" data-label="Fahrt verwerfen">Fahrt verwerfen</button></div>`;
   }
   function drawBike(f) {
     if (F.free) return drawFree(f);
@@ -218,7 +240,8 @@ const Focus = (function () {
       <div class="f-adj"><button type="button" class="btn" data-f="seg-" ${cur === 0 ? "disabled" : ""}>‹ Zurück</button><button type="button" class="btn ${F.runFrom ? "" : "rad"} f-play" data-f="play">${F.runFrom ? "Pause" : F.phase === "go" ? "▶ Start" : "▶ Weiter"}</button><button type="button" class="btn" data-f="seg+" ${next ? "" : "disabled"}>Weiter ›</button></div>
       <div class="f-total"><span class="label">Gesamt</span><span class="num" id="btotal">${mmss(e)} / ${mmss(total)}</span></div>
       <div class="track"><i id="bbar" style="width:${Math.min(100, (e / total) * 100).toFixed(1)}%"></i></div>
-      <button type="button" class="btn" data-f="end">Einheit beenden</button></div>`;
+      <button type="button" class="btn" data-f="end">Einheit beenden</button>
+      <button type="button" class="btn ghost-danger" data-f="reset" data-label="Training verwerfen">Training verwerfen</button></div>`;
   }
 
   /* ---------- events ---------- */
@@ -244,6 +267,7 @@ const Focus = (function () {
     else if (a === "end") { F.elapsed = bikeElapsed(); F.runFrom = 0; F.phase = "summary"; save(); draw(); }
     else if (a === "tests") { close(false); go("tests", true); }
     else if (a === "finish") { close(false); toast("Training beendet"); }
+    else if (a === "reset") confirmReset(b, F.date);
   });
   document.addEventListener("change", (ev) => { const f = el(); if (!f || f.hidden || !f.contains(ev.target)) return; const nt = ev.target.closest("[data-note]"); if (nt) setNote(nt.dataset.note, nt.dataset.k, nt.value); });
   document.addEventListener("visibilitychange", () => { if (!document.hidden && F && !el().hidden) { keepAwake(); onTick(); } });
@@ -251,5 +275,5 @@ const Focus = (function () {
 
   /* resume after a reload */
   function resume() { const l = loadLive(); if (l && l.date === TODAY) { F = l; open(); } else if (l) { try { localStorage.removeItem(LK); } catch (_) {} } }
-  return { start, isLive, resume };
+  return { start, isLive, resume, confirmReset };
 })();
