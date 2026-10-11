@@ -100,7 +100,7 @@ function fillW(t){return t.replace(/\{(\w+)\}/g,(m,k)=>{
 const BIKE=new Set(["Ride","VirtualRide","GravelRide","MountainBikeRide","EBikeRide","EMountainBikeRide","Velomobile","Handcycle"]);
 const GYMT=new Set(["WeightTraining","Workout","Crossfit"]);
 function norm(a){const s=a.summary||{},st=a.start_local||"";
-  return {id:String(a.id),name:a.name||"Aktivität",cat:BIKE.has(a.sport_type)?"bike":GYMT.has(a.sport_type)?"gym":"other",date:st.slice(0,10),hour:+st.slice(11,13)||0,min:(s.moving_time||0)/60,km:(s.distance||0)/1000,hm:s.elevation_gain||0}}
+  return {id:String(a.id),name:a.name||"Aktivität",cat:BIKE.has(a.sport_type)?"bike":GYMT.has(a.sport_type)?"gym":"other",date:st.slice(0,10),hour:+st.slice(11,13)||0,min:(s.moving_time||0)/60,km:(s.distance||0)/1000,hm:s.elevation_gain||0,poly:a.poly||null,watts:a.watts||null,np:a.np||null,hr:a.hr||null,kmh:a.kmh||null}}
 function gymKey(n){n=n.toLowerCase();if(/ober|upper/.test(n))return "upper";if(/bein|bene|leg|rdl|squat|kniebeuge/.test(n))return "legs";if(/pull|rücken|ruecken|back|latzug/.test(n))return "pull";if(/push|brust|chest|schräg|bank/.test(n))return "push";return null}
 
 /* ================= Planner ================= */

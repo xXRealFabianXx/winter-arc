@@ -57,12 +57,66 @@ function weekChart(series, opts) {
   const defs = `<defs><linearGradient id="gRad" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="var(--rad)"/><stop offset="1" stop-color="var(--rad2)"/></linearGradient><linearGradient id="gKraft" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="var(--kraft)"/><stop offset="1" stop-color="var(--kraft2)"/></linearGradient><linearGradient id="gAll" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="var(--violet)"/><stop offset="1" stop-color="var(--done)"/></linearGradient></defs>`;
   return `<div class="chart"><svg viewBox="0 0 ${Wd} ${H}" role="img" aria-label="${esc(opts.aria)}">${defs}${g}</svg></div>`;
 }
+/* ---------- Strava route graphic (from the activity's summary polyline, drawn as our own SVG) ---------- */
+function decodePoly(str) {
+  const pts = []; let i = 0, lat = 0, lng = 0;
+  while (i < str.length) {
+    for (const which of [0, 1]) {
+      let b, shift = 0, res = 0;
+      do { b = str.charCodeAt(i++) - 63; res |= (b & 31) << shift; shift += 5; } while (b >= 32 && i < str.length);
+      const d = res & 1 ? ~(res >> 1) : res >> 1;
+      if (which) lng += d; else lat += d;
+    }
+    pts.push([lat / 1e5, lng / 1e5]);
+  }
+  return pts;
+}
+let routeN = 0;
+function routeSvg(poly, mini) {
+  let pts; try { pts = decodePoly(poly || ""); } catch (_) { return ""; }
+  if (pts.length < 2) return "";
+  const W = mini ? 48 : 360, H = mini ? 48 : 200, pad = mini ? 5 : 18;
+  const lat0 = pts.reduce((t, p) => t + p[0], 0) / pts.length, kx = Math.cos(lat0 * Math.PI / 180);
+  const xy = pts.map((p) => [p[1] * kx, -p[0]]);
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  xy.forEach(([x, y]) => { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; });
+  const sc = Math.min((W - 2 * pad) / (x1 - x0 || 1e-9), (H - 2 * pad) / (y1 - y0 || 1e-9));
+  const ox = (W - (x1 - x0) * sc) / 2, oy = (H - (y1 - y0) * sc) / 2;
+  const P = xy.map(([x, y]) => [(x - x0) * sc + ox, (y - y0) * sc + oy]);
+  const d = "M" + P.map((p) => p[0].toFixed(1) + " " + p[1].toFixed(1)).join("L");
+  const a = P[0], z = P[P.length - 1], id = "rg" + (++routeN);
+  const loop = Math.hypot(a[0] - z[0], a[1] - z[1]) < (mini ? 3 : 10);
+  if (mini) return `<svg class="route-mini" viewBox="0 0 ${W} ${H}" aria-hidden="true"><defs><linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${a[0]}" y1="${a[1]}" x2="${z[0] + 0.01}" y2="${z[1]}"><stop offset="0" stop-color="var(--rad2)"/><stop offset="1" stop-color="var(--rad)"/></linearGradient></defs><path d="${d}" fill="none" stroke="url(#${id})" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  const grid = Array.from({ length: 9 }, (_, i) => `<path d="M${(i + 1) * W / 10} 0V${H}"/>`).join("") + Array.from({ length: 4 }, (_, i) => `<path d="M0 ${(i + 1) * H / 5}H${W}"/>`).join("");
+  return `<svg class="route" viewBox="0 0 ${W} ${H}" role="img" aria-label="Streckenverlauf"><defs>
+    <linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${a[0]}" y1="${a[1]}" x2="${(loop ? P[Math.floor(P.length / 2)][0] : z[0]) + 0.01}" y2="${loop ? P[Math.floor(P.length / 2)][1] : z[1]}"><stop offset="0" stop-color="var(--rad2)"/><stop offset=".55" stop-color="var(--rad)"/><stop offset="1" stop-color="var(--violet)"/></linearGradient>
+    <filter id="${id}b" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="5"/></filter></defs>
+    <g class="route-grid">${grid}</g>
+    <path class="route-glow" d="${d}" stroke="url(#${id})" filter="url(#${id}b)"/>
+    <path class="route-line" d="${d}" stroke="url(#${id})" pathLength="1"/>
+    <circle class="route-end" cx="${z[0].toFixed(1)}" cy="${z[1].toFixed(1)}" r="5"/>
+    <circle class="route-start" cx="${a[0].toFixed(1)}" cy="${a[1].toFixed(1)}" r="${loop ? 6.5 : 5}"/>
+  </svg>`;
+}
+function rideStats(a) {
+  const st = [[fN(a.km, 1), "km"], [fN(a.hm), "hm"], [fH(a.min), "h"]];
+  if (a.np || a.watts) st.push([fN(Math.round(a.np || a.watts)), a.np ? "W NP" : "Ø W"]);
+  else if (a.kmh) st.push([fN(a.kmh, 1), "km/h"]);
+  if (a.hr) st.push([fN(Math.round(a.hr)), "Ø Puls"]);
+  return `<div class="ride-stats" style="--n:${st.length}">${st.map(([v, u]) => `<span><b class="num">${v}</b><small>${u}</small></span>`).join("")}</div>`;
+}
+function rideBlock(a) {
+  if (!a) return "";
+  const svg = a.poly ? routeSvg(a.poly) : "";
+  return `<div class="ride">${svg ? `<div class="route-wrap">${svg}</div>` : ""}<div class="ride-info"><div class="ride-meta"><b>${esc(a.name)}</b><a class="label" href="https://www.strava.com/activities/${encodeURIComponent(a.id)}" target="_blank" rel="noopener">${dm(a.date)} · Auf Strava ↗</a></div>${rideStats(a)}</div></div>`;
+}
+const lastRide = () => S.acts.filter((a) => a.cat === "bike").sort((x, y) => (x.date < y.date ? 1 : x.date > y.date ? -1 : (y.hour || 0) - (x.hour || 0)))[0] || null;
 const recentList = (cat, n) => {
   const list = S.acts.filter((a) => !cat || a.cat === cat).slice().sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, n);
   if (!S.live) return `<p class="empty">Erscheint, sobald Strava verbunden ist.</p>`;
   if (!list.length) return `<p class="empty">Noch keine Einheiten.</p>`;
   const col = { bike: "var(--rad)", gym: "var(--kraft)", other: "var(--faint)" };
-  return `<ul class="feed">${list.map((a) => `<li><span style="display:flex;gap:10px;align-items:center;min-width:0"><span class="dot" style="background:${col[a.cat]}"></span><a href="https://www.strava.com/activities/${encodeURIComponent(a.id)}" target="_blank" rel="noopener">${esc(a.name)}</a></span><span class="m num">${dm(a.date)} · ${a.cat === "bike" ? fN(a.km, 1) + " km" : fH(a.min) + " h"}</span></li>`).join("")}</ul>`;
+  return `<ul class="feed">${list.map((a) => `<li><span style="display:flex;gap:10px;align-items:center;min-width:0">${a.poly && a.cat === "bike" ? routeSvg(a.poly, true) : `<span class="dot" style="background:${col[a.cat]}"></span>`}<a href="https://www.strava.com/activities/${encodeURIComponent(a.id)}" target="_blank" rel="noopener">${esc(a.name)}</a></span><span class="m num">${dm(a.date)} · ${a.cat === "bike" ? fN(a.km, 1) + " km" : fH(a.min) + " h"}</span></li>`).join("")}</ul>`;
 };
 
 /* ---------- views ---------- */
@@ -86,6 +140,8 @@ function vHeute() {
         <div class="t-detail">${esc(s.cat === "bike" ? fillW(s.detail) : s.test ? s.detail : s.detail + " · " + RIR(w))}</div>`;
       if (s.cat === "bike") body += `<div class="specs">${S.ftp ? `<span class="spec"><span>Z2</span>${fillW("{Z2}")}</span><span class="spec"><span>FTP</span>${S.ftp} W</span>` : `<span class="spec"><span>Zonen</span>in % FTP</span>`}<span class="spec"><span>Dauer</span>${s.min}′</span></div>`;
       if (s.ex) body += exChecklist(day, logSess(day, s));
+      const ride = day.acts.filter((x) => x.cat === "bike").sort((x, y) => y.km - x.km)[0];
+      if (ride) body += rideBlock(ride);
       if (day.status === "done" || (isToday && day.done.length)) body += feedbackBlock(day, s);
     } else {
       body += `<div class="t-title">${day.status === "rest" ? "Ruhetag" : "Frei"}</div><div class="t-detail">${day.status === "rest" ? "Eingetragen. Die übrigen Einheiten rücken nach." : "Keine Einheit geplant. Leg eine fest, wenn du Lust hast."}</div>`;
@@ -235,6 +291,7 @@ function vRad() {
   return {
     hero: `<span class="label">${S.bike ? esc(S.bike.name) + " · " + fN(S.bike.km) + " km" : "Dein Rad"}</span><h1 class="xl"><span class="grad-rad">Rad</span></h1><p class="sub">${S.ftp ? "FTP " + S.ftp + " W" + (wkg ? " · " + fN(wkg, 2) + " W/kg" : "") : "FTP aus Strava"} · Ziel ${fg ? fg + " W" : "+10 %"}</p>`,
     body: `<section class="card accent-rad span-12 free-ride"><div><h3>Einfach fahren</h3><span class="muted" style="font-size:.88rem">Ohne Vorgaben: Stoppuhr, Runden und deine Wattzonen als Orientierung.</span></div><button class="btn rad start" type="button" data-start="free" data-date="${TODAY}">▶ Freie Fahrt starten</button></section>` + `<div class="span-12 kpis">${kpi("Diese Woche", fN(W.km), " km", W.bikeN + " von 3 Ausfahrten")}${kpi("Rad-Zeit", fH(W.bikeMin), " h")}${kpi("Höhenmeter", fN(W.hm), " Hm")}${kpi("Längste", fH(W.maxRide), " h", "Ausfahrt der Woche")}</div>` +
+      (lastRide() ? `<section class="card accent-rad span-12 ride-card"><div class="card-h"><h3>Letzte Ausfahrt</h3><span class="label">Strava</span></div>${rideBlock(lastRide())}</section>` : "") +
       `<section class="card accent-rad span-7"><div class="card-h"><h3>Nächste Ausfahrten</h3><span class="label">3 pro Woche</span></div><div class="rows">${next.length ? next.map((x) => dayRow(x)).join("") : `<p class="empty">Keine Ausfahrt mehr geplant.</p>`}</div></section>` +
       `<section class="card span-5"><div class="card-h"><h3>Wattzonen</h3><span class="label">${S.ftp ? "FTP " + S.ftp + " W" : "% FTP"}</span></div><div class="zones">${zoneRows}</div><span class="label">Sweetspot ${fillW("{SS}")}</span></section>` +
       `<section class="card span-12"><div class="card-h"><h3>Radeinheiten pro Etappe</h3><div class="legend label"><span><i style="background:var(--rad)"></i>Erledigt</span><span><i style="border:1.5px dashed var(--muted)"></i>Plan 3</span></div></div>${weekChart(R.weeks.map((x) => ({ val: x.bikeN, plan: 3 })), { step: 1, min: 3, tick: (v) => v, grad: "gRad", aria: "Radeinheiten je Etappe" })}</section>` +
@@ -720,7 +777,7 @@ function loadState() {
   const C = L.load("wa.checks"), CC = {}; Object.keys(C).forEach((k) => { const v = C[k]; if (v && Array.isArray(v.ex)) CC[k] = { key: v.key, ex: v.ex.slice() }; }); S.C = CC;
   recalcFtp();
 }
-const ASSET_V = "28";
+const ASSET_V = "29";
 function bootDb() { DB = makeDB(); S.dbOK = true; S.sync = "local"; loadState(); }
 async function syncRemote() {
   try {

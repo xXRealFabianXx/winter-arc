@@ -565,3 +565,27 @@ body.focus-open{overflow:hidden}
 .sp-alt{margin-top:10px}
 .sp-alt summary{cursor:pointer;margin-bottom:8px}
 .sp-alt form{margin-bottom:6px}
+/* Strava route graphic */
+.ride{display:flex;flex-direction:column;gap:12px;margin-top:6px}
+.route-wrap{position:relative;border-radius:18px;overflow:hidden;border:1px solid var(--line);
+  background:radial-gradient(120% 90% at 30% 20%,color-mix(in srgb,var(--rad) 14%,transparent),transparent 60%),radial-gradient(90% 80% at 85% 90%,color-mix(in srgb,var(--violet) 16%,transparent),transparent 60%),var(--card-hi)}
+.route{display:block;width:100%;height:auto;aspect-ratio:9/5}
+.route-grid path{stroke:var(--line);stroke-width:.6;fill:none}
+.route-glow{fill:none;stroke-width:7;stroke-linecap:round;stroke-linejoin:round;opacity:.55}
+.route-line{fill:none;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:1;stroke-dashoffset:1;animation:route-draw 1.6s cubic-bezier(.6,.05,.25,1) .15s forwards}
+.route-start{fill:var(--done);stroke:var(--bg);stroke-width:2.5}
+.route-end{fill:var(--ink);stroke:var(--violet);stroke-width:2.5;opacity:0;animation:route-pop .3s ease 1.6s forwards}
+@keyframes route-draw{to{stroke-dashoffset:0}}
+@keyframes route-pop{to{opacity:1}}
+@media (prefers-reduced-motion:reduce){.route-line{animation:none;stroke-dashoffset:0}.route-end{animation:none;opacity:1}}
+.ride-meta{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+.ride-meta b{font-size:1.02rem;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.ride-meta a{text-decoration:none}
+.ride-info{display:flex;flex-direction:column;gap:12px;min-width:0}
+.ride-stats{display:grid;grid-template-columns:repeat(var(--n,4),minmax(0,1fr));gap:6px}
+.ride-stats span{display:flex;flex-direction:column;gap:2px;min-width:0;padding:10px 10px;border-radius:14px;background:var(--card-hi);border:1px solid var(--line)}
+.ride-stats b{font-size:1.15rem;font-weight:700;letter-spacing:-.01em}
+.ride-stats small{font-size:.7rem;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+.route-mini{width:30px;height:30px;flex:none;border-radius:8px;background:var(--card-hi);border:1px solid var(--line)}
+@media (max-width:480px){.ride-stats b{font-size:1rem}.ride-stats small{font-size:.6rem;letter-spacing:.03em}.ride-stats span{padding:9px 8px}}
+@media (min-width:900px){.ride-card .ride{display:grid;grid-template-columns:1.3fr 1fr;align-items:center;gap:22px}.ride-card .ride-info{gap:18px}.ride-card .ride-meta{flex-direction:column;gap:6px}.ride-card .ride-meta b{font-size:1.4rem;white-space:normal}.ride-card .ride-stats{grid-template-columns:repeat(3,minmax(0,1fr))}}

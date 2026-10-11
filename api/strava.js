@@ -41,6 +41,11 @@ export default async function handler(req, res) {
         sport_type: a.sport_type || a.type,
         start_local: a.start_date_local,
         summary: { moving_time: a.moving_time, distance: a.distance, elevation_gain: a.total_elevation_gain },
+        poly: (a.map && a.map.summary_polyline) || null,
+        watts: a.average_watts || null,
+        np: a.weighted_average_watts || null,
+        hr: a.average_heartrate || null,
+        kmh: a.average_speed ? Math.round(a.average_speed * 36) / 10 : null,
       })),
     });
   } catch (e) {
