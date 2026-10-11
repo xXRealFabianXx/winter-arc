@@ -430,3 +430,49 @@ body.focus-open{overflow:hidden}
 .f-zones b{font-family:var(--display);font-stretch:72%;font-weight:800;font-style:italic;font-size:1.35rem;color:var(--rad2)}
 .free-ride{flex-direction:row;align-items:center;justify-content:space-between;flex-wrap:wrap}
 @media (max-width:520px){.free-ride .btn{width:100%}}
+
+/* drag to reorder */
+.grip{display:grid;place-items:center;width:30px;height:36px;border-radius:9px;color:var(--muted);font-size:1.1rem;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;flex:none}
+.grip:hover{color:var(--ink);background:var(--card-hi)}
+.exlog.sortable{padding-left:44px}
+.exlog .grip{position:absolute;left:8px;top:10px}
+.exrow{grid-template-columns:30px minmax(0,1fr) auto auto;grid-template-areas:"grip nm step rep" "grip ord ord ord"}
+.exrow .grip{grid-area:grip}
+@media (min-width:900px){.exrow{grid-template-columns:30px minmax(0,1fr) auto auto auto;grid-template-areas:"grip nm step rep ord"}}
+.dragging{position:relative;z-index:5;box-shadow:0 18px 40px rgba(0,0,0,.45);background:var(--card-solid)!important;border-color:var(--ink)!important;transition:none!important;opacity:.97}
+.dragging .grip{cursor:grabbing;color:var(--ink)}
+.exlog.sortable .prev,.exlog.sortable .lg{padding-left:0}
+/* session timer in training mode */
+.f-session{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-top:10px;padding:12px 16px;border-radius:18px;background:var(--card);border:1px solid var(--line);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
+.f-session b{font-family:var(--display);font-stretch:66%;font-weight:900;font-style:italic;font-size:2.6rem;line-height:1}
+.focus[data-cat="gym"] .f-clock{display:none}
+
+/* ---------- training pulse ---------- */
+.focus{isolation:isolate;--beat:1.5s;--pulse-c:rgba(76,125,255,.6)}
+.focus[data-cat="bike"]{--pulse-c:rgba(255,106,43,.6)}
+.focus[data-hard="1"]{--beat:.75s;--pulse-c:rgba(255,80,40,.7)}
+.focus::before,.focus::after{content:"";position:fixed;left:50%;top:32%;width:140vmax;height:140vmax;transform:translate(-50%,-50%) scale(.6);border-radius:50%;pointer-events:none;z-index:-1;opacity:0;
+  background:radial-gradient(circle,var(--pulse-c) 0%,transparent 60%)}
+.focus[data-run="1"]::before{animation:beat var(--beat) ease-in-out infinite}
+.focus[data-run="1"]::after{animation:wave calc(var(--beat) * 2) ease-out infinite;background:radial-gradient(circle,transparent 30%,var(--pulse-c) 34%,transparent 42%)}
+@keyframes beat{0%{opacity:.55;transform:translate(-50%,-50%) scale(.6)}14%{opacity:1;transform:translate(-50%,-50%) scale(.68)}28%{opacity:.6;transform:translate(-50%,-50%) scale(.61)}42%{opacity:.9;transform:translate(-50%,-50%) scale(.66)}70%,100%{opacity:.55;transform:translate(-50%,-50%) scale(.6)}}
+@keyframes wave{0%{opacity:.5;transform:translate(-50%,-50%) scale(.25)}100%{opacity:0;transform:translate(-50%,-50%) scale(.9)}}
+.f-session,.f-bigwrap{position:relative}
+.f-bigwrap{display:grid;place-items:center}
+.f-ripple{position:absolute;left:50%;top:50%;width:0;height:0;pointer-events:none;z-index:-1}
+.f-ripple i{position:absolute;left:0;top:0;width:220px;height:220px;margin:-110px 0 0 -110px;border-radius:50%;border:2px solid var(--pulse-c);opacity:0}
+.f-session .f-ripple{left:auto;right:70px}
+.f-session .f-ripple i{width:120px;height:120px;margin:-60px 0 0 -60px}
+.focus[data-run="1"] .f-ripple i{animation:ripple calc(var(--beat) * 2) cubic-bezier(.2,.6,.3,1) infinite}
+.focus[data-run="1"] .f-ripple i:nth-child(2){animation-delay:calc(var(--beat) * .66)}
+.focus[data-run="1"] .f-ripple i:nth-child(3){animation-delay:calc(var(--beat) * 1.33)}
+@keyframes ripple{0%{opacity:.8;transform:scale(.35)}100%{opacity:0;transform:scale(1.5)}}
+.focus[data-run="1"] #fsess,.focus[data-run="1"] .f-big{animation:tick var(--beat) ease-in-out infinite}
+@keyframes tick{0%,100%{transform:scale(1)}14%{transform:scale(1.035)}28%{transform:scale(1)}42%{transform:scale(1.02)}}
+#fsess{display:inline-block;transform-origin:right center}
+.focus[data-run="1"] .f-cta{animation:breathe var(--beat) ease-in-out infinite}
+@keyframes breathe{0%,100%{box-shadow:0 0 0 0 var(--pulse-c)}20%{box-shadow:0 0 0 10px transparent}}
+.focus[data-run="1"] .f-sets span.cur{animation:breathe var(--beat) ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){.focus::before,.focus::after,.f-ripple i,#fsess,.f-big,.f-cta,.f-sets span.cur{animation:none!important}}
+.f-session{background:color-mix(in srgb,var(--card) 55%,transparent)}
+.f-ripple i{border-width:2.5px}

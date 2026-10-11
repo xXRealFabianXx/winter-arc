@@ -131,17 +131,17 @@ const logTxt = (e) => [e.kg ? fN(e.kg, 1) + " kg" : "", e.s && e.r ? e.s + "×" 
 function sessionList(day, s) {
   const log = (S.L[day.date] && S.L[day.date].key === s.key) ? S.L[day.date] : { ex: {} };
   const rm = log.removed || [], addl = log.extra || [];
-  return s.ex.filter((e) => !rm.includes(e.n)).map((e) => ({ n: e.n, s: e.s, r: e.r }))
+  const list = s.ex.filter((e) => !rm.includes(e.n)).map((e) => ({ n: e.n, s: e.s, r: e.r }))
     .concat((day.extraEx || []).filter((n) => !rm.includes(n)).map((n) => ({ n, s: 2, r: "6–8", extra: true })))
     .concat(addl.filter((n) => !s.ex.some((e) => e.n === n)).map((n) => ({ n, s: s.key === "legs" ? 2 : 3, r: "6–8", added: true })));
+  const ord = log.order || [];
+  if (ord.length) list.sort((a, b) => { const ia = ord.indexOf(a.n), ib = ord.indexOf(b.n); return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib); });
+  return list;
 }
 function exChecklist(day, s) {
   const can = day.i === TI && S.dbOK, canPlan = S.dbOK && day.i >= TI && !(day.locked && day.i < TI);
   const log = (S.L[day.date] && S.L[day.date].key === s.key) ? S.L[day.date] : { ex: {} };
-  const rm = log.removed || [], addl = log.extra || [];
-  const list = s.ex.filter((e) => !rm.includes(e.n)).map((e) => ({ n: e.n, s: e.s, r: e.r }))
-    .concat((day.extraEx || []).filter((n) => !rm.includes(n)).map((n) => ({ n, s: 2, r: "6–8", extra: true })))
-    .concat(addl.filter((n) => !s.ex.some((e) => e.n === n)).map((n) => ({ n, s: s.key === "legs" ? 2 : 3, r: "6–8", added: true })));
+  const list = sessionList(day, s);
   const on = new Set(S.C[day.date] && S.C[day.date].key === s.key ? S.C[day.date].ex : []);
   const n = list.filter((e) => on.has(e.n)).length;
   const addForm = canPlan ? `<form class="exadd" data-sessadd="${day.date}" data-k="${s.key}"><input type="text" name="n" placeholder="Übung für dieses Training hinzufügen" maxlength="40" autocomplete="off" required aria-label="Übung für dieses Training hinzufügen"><button class="btn sm kraft" type="submit">Hinzufügen</button></form>` : "";
@@ -150,7 +150,7 @@ function exChecklist(day, s) {
   const items = list.map((e) => {
     const L = log.ex[e.n] || {}, prev = lastLog(e.n, day.date), done = on.has(e.n);
     const plan = s.test ? "6 Wdh. Test" : e.s + "×" + e.r;
-    return `<div class="exlog${done ? " on" : ""}${e.extra ? " extra" : ""}">
+    return `<div class="exlog${done ? " on" : ""}${e.extra ? " extra" : ""}${canPlan ? " sortable" : ""}" data-sort-id="${esc(e.n)}">${canPlan ? `<span class="grip" aria-label="${esc(e.n)} verschieben: festhalten und ziehen" role="button" tabindex="0">⠿</span>` : ""}
       <button type="button" class="ex-h" data-ex="${esc(e.n)}" data-date="${day.date}" data-k="${s.key}" aria-pressed="${done}" ${can ? "" : "disabled"}><span class="box">✓</span><span class="nm">${esc(e.n)}</span><span class="sx">${e.extra ? "nachholen" : e.added ? "zusätzlich" : esc(plan)}</span></button>${canPlan ? `<button type="button" class="ex-rm" data-exrm="${esc(e.n)}" data-date="${day.date}" data-k="${s.key}" aria-label="${esc(e.n)} aus diesem Training entfernen">✕</button>` : ""}
       ${prev ? `<span class="prev">Zuletzt ${esc(logTxt(prev))} · ${DOW[(idx(prev.date) % 7 + 7) % 7]} ${dm(prev.date)}</span>` : ""}
       ${can ? `<div class="lg"><label><span>kg</span><input type="number" inputmode="decimal" step="0.5" min="0" max="500" value="${L.kg || ""}" placeholder="${prev && prev.kg ? fN(prev.kg, 1) : "–"}" data-log="kg" data-ex="${esc(e.n)}" data-date="${day.date}" data-k="${s.key}" aria-label="${esc(e.n)} Gewicht"></label>
@@ -162,7 +162,7 @@ function exChecklist(day, s) {
     ${ln ? `<div class="lastnote"><span class="label">Notiz vom letzten ${esc(s.title.replace("-Test", ""))} · ${dm(ln.date)}</span><p>${esc(ln.note)}</p></div>` : ""}
     <div class="card-h"><span class="label">${can ? "Übungen eintragen" : canPlan ? "Übungen anpassen" : "Übungen"}</span><span class="label num" style="color:${n === list.length ? "var(--done)" : "var(--muted)"}">${n}/${list.length}</span></div>
     <div class="track"><i style="width:${Math.round((n / list.length) * 100)}%"></i></div>
-    <div class="exlist">${items}</div>${addForm}
+    <div class="exlist"${canPlan ? ` data-sort="sess|${day.date}|${s.key}"` : ""}>${items}</div>${addForm}
     ${can ? `<label class="note"><span class="label">Notiz zum Training</span><textarea rows="2" maxlength="600" placeholder="z. B. Schulter zwickt, nächstes Mal 2,5 kg mehr" data-note="${day.date}" data-k="${s.key}">${esc(log.note || "")}</textarea></label>
     <span class="label" style="letter-spacing:.06em">Antippen hakt ab, Gewicht eintragen auch. ✕ entfernt eine Übung nur aus diesem Training, dauerhaft änderst du sie unter Kraft → Übungen.</span>` : canPlan ? `<span class="label" style="letter-spacing:.06em">Abhaken und Gewichte am Trainingstag. Hinzufügen und ✕ gelten nur für dieses Training.</span>` : log.note ? `<div class="lastnote"><span class="label">Notiz</span><p>${esc(log.note)}</p></div>` : ""}</div>`;
 }
@@ -292,14 +292,14 @@ function exEditor() {
   const cards = ["push", "pull", "legs"].map((k) => {
     const list = baseList(k);
     return `<section class="card accent-kraft span-4"><div class="card-h"><span class="xl grad-kraft" style="font-size:2.3rem">${GYM[k].n}</span><span class="label">${list.length} Übungen</span></div>
-      <div class="exedit">${list.map((e, i) => `<div class="exrow"><span class="nm">${esc(e.n)}</span>
+      <div class="exedit" data-sort="ex|${k}">${list.map((e, i) => `<div class="exrow" data-sort-id="${esc(e.n)}"><span class="grip" aria-label="${esc(e.n)} verschieben: festhalten und ziehen" role="button" tabindex="0">⠿</span><span class="nm">${esc(e.n)}</span>
         <span class="step"><button type="button" data-exed="sets" data-k="${k}" data-n="${i}" data-d="-1" aria-label="${esc(e.n)}: ein Satz weniger">−</button><b class="num">${e.s}</b><button type="button" data-exed="sets" data-k="${k}" data-n="${i}" data-d="1" aria-label="${esc(e.n)}: ein Satz mehr">+</button></span>
         <button type="button" class="rep" data-exed="reps" data-k="${k}" data-n="${i}" aria-label="Wiederholungen ändern">${esc(e.r)}</button>
-        <span class="ord"><button type="button" data-exed="up" data-k="${k}" data-n="${i}" aria-label="Nach oben" ${i === 0 ? "disabled" : ""}>↑</button><button type="button" data-exed="down" data-k="${k}" data-n="${i}" aria-label="Nach unten" ${i === list.length - 1 ? "disabled" : ""}>↓</button><button type="button" data-exed="del" data-k="${k}" data-n="${i}" aria-label="${esc(e.n)} entfernen">✕</button></span></div>`).join("") || `<p class="empty">Noch keine Übungen.</p>`}</div>
+        <span class="ord"><button type="button" data-exed="del" data-k="${k}" data-n="${i}" aria-label="${esc(e.n)} entfernen">✕</button></span></div>`).join("") || `<p class="empty">Noch keine Übungen.</p>`}</div>
       <form class="exadd" data-k="${k}"><input type="text" id="add-${k}" name="n" placeholder="Übung hinzufügen" maxlength="40" autocomplete="off" required><button class="btn sm kraft" type="submit">Hinzufügen</button></form></section>`;
   }).join("");
   return cards + `<section class="card span-12"><div class="card-h"><h3>So wirkt es</h3>${EXC ? `<button class="btn sm" type="button" data-exed="reset">Standard wiederherstellen</button>` : ""}</div>
-    <p class="empty" style="color:var(--ink2)">Oberkörper am Sonntag besteht automatisch aus allen Push- und Pull-Übungen mit höchstens 2 Sätzen. In Entlastungswochen gehen Push und Pull auf 2 Sätze. Änderungen gelten ab sofort für alle kommenden Einheiten. Satzzahl mit − und +, Wiederholungen durch Antippen ändern.</p></section>`;
+    <p class="empty" style="color:var(--ink2)">Oberkörper am Sonntag besteht automatisch aus allen Push- und Pull-Übungen mit höchstens 2 Sätzen. In Entlastungswochen gehen Push und Pull auf 2 Sätze. Änderungen gelten ab sofort für alle kommenden Einheiten. Satzzahl mit − und +, Wiederholungen durch Antippen ändern, Reihenfolge am Griff ⠿ festhalten und ziehen.</p></section>`;
 }
 function editEx(act, k, n, d) {
   if (act === "reset") { EXC = null; saveCfg("ex", null); render(); toast("Standard-Übungen wiederhergestellt"); return; }
@@ -431,6 +431,44 @@ $("main").addEventListener("change", (e) => {
   const i = e.target.closest("[data-tex]"); if (!i) return;
   const v = parseFloat(String(i.value).replace(",", ".")); setTest("kraft", +i.dataset.n, i.dataset.tex, v > 0 ? v : null);
 });
+/* reorder exercises: hold the grip and drag */
+function saveOrder(spec, ids) {
+  const [kind, a, b] = spec.split("|");
+  if (kind === "ex") {
+    if (!EXC) EXC = { push: baseList("push").map((e) => ({ ...e })), pull: baseList("pull").map((e) => ({ ...e })), legs: baseList("legs").map((e) => ({ ...e })) };
+    const L = EXC[a]; L.sort((x, y) => ids.indexOf(x.n) - ids.indexOf(y.n)); saveCfg("ex", EXC);
+  } else if (kind === "sess") { const L = logOf(a, b); L.order = ids; saveLog(a); }
+  render(); if (!$("scrim").hidden && sheetI !== null) openSheet(sheetI);
+  toast("Reihenfolge gespeichert");
+}
+(function () {
+  let drag = null;
+  document.addEventListener("pointerdown", (e) => {
+    const g = e.target.closest(".grip"); if (!g) return;
+    const item = g.closest("[data-sort-id]"), list = item && item.parentElement; if (!list || !list.dataset.sort) return;
+    e.preventDefault();
+    drag = { item, list, y0: e.clientY, id: e.pointerId, moved: false };
+    item.classList.add("dragging"); try { g.setPointerCapture(e.pointerId); } catch (_) {}
+    try { if (navigator.vibrate) navigator.vibrate(15); } catch (_) {}
+  });
+  document.addEventListener("pointermove", (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const { item, list } = drag; let dy = e.clientY - drag.y0; drag.moved = true;
+    const next = item.nextElementSibling, prev = item.previousElementSibling, gap = 8;
+    if (next && next.dataset.sortId !== undefined && dy > next.offsetHeight / 2) { list.insertBefore(next, item); drag.y0 += next.offsetHeight + gap; dy = e.clientY - drag.y0; }
+    else if (prev && prev.dataset.sortId !== undefined && dy < -prev.offsetHeight / 2) { list.insertBefore(item, prev); drag.y0 -= prev.offsetHeight + gap; dy = e.clientY - drag.y0; }
+    item.style.transform = `translateY(${dy}px)`;
+    if (e.clientY < 90) window.scrollBy(0, -12); else if (e.clientY > window.innerHeight - 110) window.scrollBy(0, 12);
+  });
+  const end = (e) => {
+    if (!drag || (e && e.pointerId !== drag.id)) return;
+    const { item, list, moved } = drag; drag = null;
+    item.classList.remove("dragging"); item.style.transform = "";
+    if (moved) saveOrder(list.dataset.sort, [...list.querySelectorAll(":scope > [data-sort-id]")].map((x) => x.dataset.sortId));
+  };
+  document.addEventListener("pointerup", end); document.addEventListener("pointercancel", end);
+})();
+
 /* drag the 3D object on the hero area */
 (function () {
   const h = $("hero"); let x0 = null;

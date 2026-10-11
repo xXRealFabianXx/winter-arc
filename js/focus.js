@@ -47,7 +47,7 @@ const Focus = (function () {
   /* ---------- lifecycle ---------- */
   function start(date, key) {
     const live = loadLive();
-    if (live && live.date === date && live.key === key) F = live;
+    if (live && live.date === date && live.key === key) { F = live; if (F.phase === "rest") F.phase = "go"; }
     else {
       const s = sessFor(date, key);
       F = { date, key, cat: key === "free" ? "bike" : CAT[key], free: key === "free", laps: [], phase: "go", started: Date.now(), i: 0, set: 0, restEnd: 0, restDur: 90, elapsed: 0, runFrom: 0 };
@@ -84,8 +84,8 @@ const Focus = (function () {
     const done = e.sets.filter(Boolean); e.s = done.length; e.kg = kg || e.kg; e.r = r || e.r; L.ex[it.n] = e; saveLog(F.date);
     const c = S.C[F.date]; if (!(c && c.key === F.key && c.ex.includes(it.n))) toggleEx(F.date, F.key, it.n, true);
     const sets = s.test ? 1 : it.s;
-    if (F.set + 1 < sets) { F.set++; startRest(); }
-    else if (F.i + 1 < items.length) { F.i++; F.set = 0; startRest(); }
+    if (F.set + 1 < sets) { F.set++; F.phase = "go"; }
+    else if (F.i + 1 < items.length) { F.i++; F.set = 0; F.phase = "go"; toast("Weiter: " + items[F.i].n); }
     else { F.phase = "summary"; }
     save(); draw();
   }
@@ -94,8 +94,10 @@ const Focus = (function () {
 
   /* ---------- bike timer ---------- */
   function bikeElapsed() { return F.elapsed + (F.runFrom ? (Date.now() - F.runFrom) / 1000 : 0); }
-  function bikeToggle() { if (F.runFrom) { F.elapsed = bikeElapsed(); F.runFrom = 0; } else { F.runFrom = Date.now(); if (F.phase === "go") F.phase = "ride"; } save(); draw(); }
+  function bikeToggle0() { if (F.runFrom) { F.elapsed = bikeElapsed(); F.runFrom = 0; } else { F.runFrom = Date.now(); if (F.phase === "go") F.phase = "ride"; } save(); draw(); }
   function bikeSkip(dir) { const segs = F.segs; let t = 0, cur = 0; const e = bikeElapsed(); for (let i = 0; i < segs.length; i++) { if (e < t + segs[i].d) { cur = i; break; } t += segs[i].d; cur = i; } const target = Math.max(0, Math.min(segs.length - 1, cur + dir)); let start2 = 0; for (let i = 0; i < target; i++) start2 += segs[i].d; F.elapsed = start2 + 0.5; if (F.runFrom) F.runFrom = Date.now(); save(); draw(); }
+
+  function bikeToggle() { bikeToggle0(); }
 
   /* ---------- ticking ---------- */
   function onTick() {
@@ -128,6 +130,8 @@ const Focus = (function () {
   }
   function draw() {
     const f = el(); if (!F) return;
+    f.dataset.run = F.cat === "gym" ? (F.phase === "summary" ? "0" : "1") : F.runFrom ? "1" : "0";
+    if (F.cat === "bike" && !F.free && F.segs && F.segs.length) { const e = bikeElapsed(); let t = 0, c = F.segs.length - 1; for (let i = 0; i < F.segs.length; i++) { if (e < t + F.segs[i].d) { c = i; break; } t += F.segs[i].d; } f.dataset.hard = F.segs[c].hard && F.runFrom ? "1" : "0"; } else f.dataset.hard = "0";
     if (F.cat === "bike") return drawBike(f);
     const { s, items } = list(), it = items[F.i];
     const dots = `<div class="f-dots">${items.map((x, i) => { const L = S.L[F.date], e = L && L.ex[x.n], n = e && e.sets ? e.sets.filter(Boolean).length : 0; return `<button type="button" class="f-dot${i === F.i ? " cur" : ""}${n ? " ok" : ""}" data-fj="${i}" aria-label="${esc(x.n)}"></button>`; }).join("")}</div>`;
@@ -143,7 +147,7 @@ const Focus = (function () {
         <button type="button" class="btn primary f-cta" data-f="skip">Weiter</button></div>`;
       onTick(); return;
     }
-    f.innerHTML = head(s.title, "Übung " + (F.i + 1) + " von " + items.length) + dots + `<div class="f-body">
+    f.innerHTML = head(s.title, "Übung " + (F.i + 1) + " von " + items.length) + dots + `<div class="f-session"><span class="f-ripple" aria-hidden="true"><i></i><i></i><i></i></span><span class="label">Im Training seit</span><b class="num" id="fsess">${mmss((Date.now() - F.started) / 1000)}</b></div><div class="f-body">
       ${F.i === 0 && F.set === 0 && ln ? `<div class="lastnote"><span class="label">Notiz vom letzten Mal · ${dm(ln.date)}</span><p>${esc(ln.note)}</p></div>` : ""}
       <div class="f-ex"><span class="label">${it.extra ? "Nachholen" : it.added ? "Zusätzlich" : s.test ? "Test · 6 saubere Wdh." : esc(it.s + " × " + it.r + " Wdh.")}</span><h2 class="xl">${esc(it.n)}</h2>
         <div class="f-sets">${Array.from({ length: sets }, (_, k) => `<span class="${k < F.set ? "ok" : k === F.set ? "cur" : ""}">${k + 1}</span>`).join("")}</div>
@@ -183,7 +187,7 @@ const Focus = (function () {
     }
     f.innerHTML = head("Freie Fahrt", F.runFrom ? "Läuft" : F.phase === "go" ? "Bereit" : "Pause") + `<div class="f-body bike">
       <div class="f-ex"><span class="label">Einfach fahren</span><h2 class="xl grad-rad">Ohne Plan</h2><span class="f-last">Keine Vorgaben. Die Zonen unten helfen bei der Orientierung.</span></div>
-      <div class="f-big num" id="bfree">${mmss(e)}</div>
+      <div class="f-bigwrap"><span class="f-ripple" aria-hidden="true"><i></i><i></i><i></i></span><div class="f-big num" id="bfree">${mmss(e)}</div></div>
       <div class="f-total"><span class="label">Aktuelle Runde</span><span class="num" id="blap">${mmss(e - (F.laps.length ? F.laps[F.laps.length - 1] : 0))}</span></div>
       <div class="f-adj"><button type="button" class="btn ${F.runFrom ? "" : "rad"} f-play" data-f="play">${F.runFrom ? "Pause" : F.phase === "go" ? "▶ Start" : "▶ Weiter"}</button><button type="button" class="btn" data-f="lap" ${F.runFrom ? "" : "disabled"}>Runde</button></div>
       <div class="f-zones">${zones.map((z) => `<div><span class="label">${z[0]} · ${z[1]}</span><b class="num">${esc(fillW(z[2]))}</b></div>`).join("")}</div>
@@ -208,7 +212,7 @@ const Focus = (function () {
       <div class="f-segs">${segs.map((x, i) => `<span class="${i < cur ? "ok" : i === cur ? "cur" : ""}${x.hard ? " hard" : ""}" style="flex:${x.d}"></span>`).join("")}</div>
       <div class="f-ex"><span class="label">${next ? "Abschnitt " + (cur + 1) + " von " + segs.length : "Letzter Abschnitt"}</span><h2 class="xl ${seg.hard ? "grad-rad" : ""}">${esc(seg.n)}</h2>
         ${seg.z ? `<span class="f-watt num">${esc(watts(seg.z))}</span>` : ""}${seg.info ? `<span class="f-last">${esc(seg.info)}</span>` : ""}</div>
-      <div class="f-big num" id="bseg">${mmss(seg.d - (e - t))}</div>
+      <div class="f-bigwrap"><span class="f-ripple" aria-hidden="true"><i></i><i></i><i></i></span><div class="f-big num" id="bseg">${mmss(seg.d - (e - t))}</div></div>
       <div class="track rad"><i id="bsegbar" style="width:${Math.min(100, ((e - t) / seg.d) * 100).toFixed(1)}%"></i></div>
       ${next ? `<div class="f-next"><span class="label">Danach</span><b>${esc(next.n)}</b><span>${mmss(next.d)}${next.z ? " · " + esc(watts(next.z)) : ""}</span></div>` : ""}
       <div class="f-adj"><button type="button" class="btn" data-f="seg-" ${cur === 0 ? "disabled" : ""}>‹ Zurück</button><button type="button" class="btn ${F.runFrom ? "" : "rad"} f-play" data-f="play">${F.runFrom ? "Pause" : F.phase === "go" ? "▶ Start" : "▶ Weiter"}</button><button type="button" class="btn" data-f="seg+" ${next ? "" : "disabled"}>Weiter ›</button></div>
@@ -243,7 +247,7 @@ const Focus = (function () {
   });
   document.addEventListener("change", (ev) => { const f = el(); if (!f || f.hidden || !f.contains(ev.target)) return; const nt = ev.target.closest("[data-note]"); if (nt) setNote(nt.dataset.note, nt.dataset.k, nt.value); });
   document.addEventListener("visibilitychange", () => { if (!document.hidden && F && !el().hidden) { keepAwake(); onTick(); } });
-  setInterval(() => { const c = document.getElementById("fclock"); if (c && F) c.textContent = mmss((Date.now() - F.started) / 1000); }, 1000);
+  setInterval(() => { if (!F) return; const t = mmss((Date.now() - F.started) / 1000); const c = document.getElementById("fclock"); if (c) c.textContent = t; const s2 = document.getElementById("fsess"); if (s2) s2.textContent = t; }, 1000);
 
   /* resume after a reload */
   function resume() { const l = loadLive(); if (l && l.date === TODAY) { F = l; open(); } else if (l) { try { localStorage.removeItem(LK); } catch (_) {} } }
