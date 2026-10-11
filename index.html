@@ -38,10 +38,13 @@ body{background-color:var(--bg);color:var(--ink);font-family:var(--body);font-si
   background-image:radial-gradient(900px 520px at 8% -8%,var(--glow),transparent 62%),radial-gradient(700px 480px at 100% 10%,var(--glow2),transparent 60%),linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
   background-size:auto,auto,44px 44px,44px 44px;background-attachment:scroll;padding-inline:16px;padding-block:18px 64px}
 .wrap{max-width:1160px;margin:0 auto;display:flex;flex-direction:column;gap:40px;position:relative;z-index:1}
-#bg3d{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none;display:block}
-@media (max-width:760px){#bg3d{opacity:.55}}
-@media (prefers-color-scheme: light){:root:not([data-theme="dark"]) #bg3d{opacity:.85}}
-:root[data-theme="light"] #bg3d{opacity:.85}
+#bikeBg{position:fixed;inset:0;z-index:0;pointer-events:none;perspective:1400px;overflow:hidden}
+#bikeBg .bk{position:absolute;left:50%;top:50%;width:min(64vw,960px);aspect-ratio:1120/640;transform:translate(-50%,-50%);transform-style:preserve-3d;will-change:transform}
+#bikeBg img{position:relative;display:block;width:100%;height:auto;max-width:100%;filter:drop-shadow(0 34px 50px rgba(0,0,0,.55)) drop-shadow(0 0 46px rgba(108,72,255,.28))}
+#bikeBg .bk-glow{position:absolute;left:8%;right:8%;bottom:-6%;height:22%;border-radius:50%;background:radial-gradient(closest-side,rgba(108,72,255,.45),transparent);filter:blur(10px);transform:translateZ(-40px)}
+@media (max-width:760px){#bikeBg{opacity:.4}#bikeBg .bk{width:118vw}}
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]) #bikeBg{opacity:.9}}
+:root[data-theme="light"] #bikeBg{opacity:.9}
 button{font:inherit;color:inherit;cursor:pointer}
 :focus-visible{outline:2px solid var(--ion2);outline-offset:3px;border-radius:6px}
 .num{font-variant-numeric:tabular-nums}
@@ -236,7 +239,7 @@ section{display:flex;flex-direction:column;gap:16px}
 </style>
 </head>
 <body>
-<canvas id="bg3d" aria-hidden="true"></canvas>
+<div id="bikeBg" aria-hidden="true"><div class="bk" id="bk"><div class="bk-glow"></div><img src="/bike.webp" alt="" width="1120" height="640" decoding="async"></div></div>
 <div class="wrap">
   <div class="topbar">
     <div class="brand">
@@ -334,141 +337,32 @@ section{display:flex;flex-direction:column;gap:16px}
 <div class="scrim" id="scrim" hidden><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" id="sheet"></div></div>
 <div class="toast" id="toast" hidden></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
-/* 3D race bike in the background: spins continuously, travels across the page as you scroll, tilts with the pointer */
+/* Bike photo in the background: floats, sways in 3D, travels across the page while scrolling, tilts with the pointer */
 (function(){
-"use strict";
-if(!window.THREE)return;
-const canvas=document.getElementById("bg3d");
-let renderer;
-try{renderer=new THREE.WebGLRenderer({canvas:canvas,antialias:true,alpha:true,powerPreference:"low-power"})}catch(_){canvas.hidden=true;return}
-renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.5));
-renderer.outputEncoding=THREE.sRGBEncoding;
-renderer.toneMapping=THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure=1.15;
-const scene=new THREE.Scene();
-const camera=new THREE.PerspectiveCamera(30,1,0.1,50);
-const V=(x,y,z)=>new THREE.Vector3(x,y,z||0);
-const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim()||"#ffffff";
-
-/* materials — Purple Punch frame */
-const frameM=new THREE.MeshPhysicalMaterial({color:0x4b2fc2,metalness:.5,roughness:.26,clearcoat:1,clearcoatRoughness:.06,sheen:0});
-const blackM=new THREE.MeshStandardMaterial({color:0x141417,metalness:.35,roughness:.5});
-const carbonM=new THREE.MeshStandardMaterial({color:0x1b1b20,metalness:.55,roughness:.32});
-const tireM=new THREE.MeshStandardMaterial({color:0x0b0b0c,roughness:.9});
-const metalM=new THREE.MeshStandardMaterial({color:0xa9aeb6,metalness:.95,roughness:.25});
-
-const pivot=new THREE.Group(),bike=new THREE.Group();
-pivot.add(bike);bike.position.set(0,-.6,0);scene.add(pivot);
-function tube(pts,r,m,seg){const c=pts.length===2?new THREE.LineCurve3(pts[0],pts[1]):new THREE.CatmullRomCurve3(pts);const g=new THREE.Mesh(new THREE.TubeGeometry(c,seg||24,r,16,false),m);bike.add(g);return g}
-function ball(p,r,m){const s=new THREE.Mesh(new THREE.SphereGeometry(r,20,14),m);s.position.copy(p);bike.add(s);return s}
-
-/* geometry (metres, side view in XY, Z = lateral) */
-const RA=V(-.5,.34),FA=V(.5,.34),BB=V(-.08,.27),SC=V(-.22,.80),HT=V(.355,.875),HB=V(.405,.69);
-tube([BB,SC],.017,frameM);
-tube([SC,V(.07,.845),HT],.019,frameM);
-tube([BB,V(.16,.48),HB],.028,frameM);
-tube([V(.41,.665),V(.35,.895)],.027,frameM);
-ball(BB,.034,frameM);ball(SC,.022,frameM);ball(HT,.027,frameM);ball(HB,.029,frameM);
-[-1,1].forEach(s=>{
-  tube([V(-.07,.27,s*.04),V(-.3,.30,s*.062),V(-.5,.34,s*.066)],.011,frameM);
-  tube([V(-.214,.765,s*.022),V(-.36,.55,s*.056),V(-.495,.35,s*.066)],.009,frameM);
-  tube([V(.41,.665,s*.034),V(.45,.5,s*.05),V(.502,.352,s*.052)],.014,frameM);
-});
-ball(V(.41,.668),.032,frameM);
-/* cockpit */
-tube([V(.35,.895),V(.347,.925)],.017,blackM);
-tube([V(.347,.915),V(.47,.935)],.016,blackM);
-tube([V(.47,.935,-.2),V(.47,.935,.2)],.012,blackM);
-[-1,1].forEach(s=>{
-  tube([V(.47,.935,s*.2),V(.545,.93,s*.205),V(.585,.86,s*.21),V(.56,.78,s*.21),V(.49,.77,s*.21)],.012,blackM,32);
-  const hood=new THREE.Mesh(new THREE.BoxGeometry(.06,.03,.025),blackM);hood.position.set(.55,.945,s*.205);hood.rotation.z=-.4;bike.add(hood);
-});
-/* seatpost + saddle */
-tube([V(-.22,.80),V(-.265,.965)],.014,blackM);
-const saddle=new THREE.Mesh(new THREE.SphereGeometry(1,24,12),blackM);saddle.scale.set(.14,.022,.055);saddle.position.set(-.255,.985,0);saddle.rotation.z=.04;bike.add(saddle);
-
-/* wheels */
-function wheel(c){
-  const w=new THREE.Group();w.position.copy(c);
-  const rim=new THREE.Mesh(new THREE.TorusGeometry(.305,.02,12,72),carbonM);
-  const rimIn=new THREE.Mesh(new THREE.TorusGeometry(.282,.011,10,72),carbonM);
-  const tyre=new THREE.Mesh(new THREE.TorusGeometry(.33,.015,12,72),tireM);
-  const hub=new THREE.Mesh(new THREE.CylinderGeometry(.022,.022,.11,16),metalM);hub.rotation.x=Math.PI/2;
-  const rotor=new THREE.Mesh(new THREE.TorusGeometry(.075,.004,6,40),metalM);rotor.position.z=-.045;
-  const pos=[];for(let k=0;k<24;k++){const a=k/24*Math.PI*2,side=k%2?1:-1;pos.push(0,0,side*.035,Math.cos(a)*.28,Math.sin(a)*.28,0)}
-  const sg=new THREE.BufferGeometry();sg.setAttribute("position",new THREE.Float32BufferAttribute(pos,3));
-  const spokes=new THREE.LineSegments(sg,new THREE.LineBasicMaterial({color:0x8d939c,transparent:true,opacity:.7}));
-  w.add(rim,rimIn,tyre,hub,rotor,spokes);bike.add(w);return w;
-}
-const rear=wheel(RA),front=wheel(FA);
-const cassette=new THREE.Mesh(new THREE.CylinderGeometry(.048,.03,.035,24),metalM);cassette.rotation.x=Math.PI/2;cassette.position.set(RA.x,RA.y,.05);bike.add(cassette);
-/* drivetrain */
-const crank=new THREE.Group();crank.position.set(BB.x,BB.y,0);bike.add(crank);
-const ring=new THREE.Mesh(new THREE.TorusGeometry(.095,.007,8,56),metalM);ring.position.z=.072;crank.add(ring);
-const ring2=new THREE.Mesh(new THREE.TorusGeometry(.075,.005,8,48),metalM);ring2.position.z=.066;crank.add(ring2);
-[[1,.085],[-1,-.085]].forEach(([s,z])=>{
-  const arm=new THREE.Mesh(new THREE.BoxGeometry(.022,.17,.014),blackM);arm.position.set(0,-.085*s,z);crank.add(arm);
-  const ped=new THREE.Mesh(new THREE.BoxGeometry(.09,.012,.06),blackM);ped.position.set(0,-.17*s,z+.03*Math.sign(z));crank.add(ped);
-});
-tube([V(-.08,.366,.072),V(-.5,.388,.06)],.003,metalM,2);
-tube([V(-.08,.175,.072),V(-.5,.292,.06)],.003,metalM,2);
-
-/* floor halo */
-const haloA=new THREE.Mesh(new THREE.RingGeometry(.78,.79,128),new THREE.MeshBasicMaterial({transparent:true,opacity:.55,side:THREE.DoubleSide}));
-const haloB=new THREE.Mesh(new THREE.RingGeometry(.9,.903,128),new THREE.MeshBasicMaterial({transparent:true,opacity:.35,side:THREE.DoubleSide}));
-[haloA,haloB].forEach(h=>{h.rotation.x=-Math.PI/2;h.position.y=-.6;pivot.add(h)});
-
-/* lights */
-const hemi=new THREE.HemisphereLight(0xffffff,0x1a1630,.75);scene.add(hemi);
-const key=new THREE.DirectionalLight(0xffffff,1.9);key.position.set(2,3,3);scene.add(key);
-const rimA=new THREE.PointLight(0xff5a1f,5,8);rimA.position.set(-2.2,1.2,-1.6);scene.add(rimA);
-const rimB=new THREE.PointLight(0x5ad8ff,5,8);rimB.position.set(2.2,1.4,-2);scene.add(rimB);
-const fill=new THREE.PointLight(0xb38cff,1.6,6);fill.position.set(0,.4,2.4);scene.add(fill);
-
-function applyTheme(){
-  const e=new THREE.Color(css("--ember")),i=new THREE.Color(css("--ion2"));
-  haloA.material.color.copy(e);haloB.material.color.copy(i);rimA.color.copy(e);rimB.color.copy(i);
-}
-applyTheme();
-try{window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change",applyTheme)}catch(_){}
-new MutationObserver(applyTheme).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
-
-/* sizing */
-let W=0,H=0,wide=true;
-function resize(){
-  W=window.innerWidth;H=window.innerHeight;wide=W>=900;
-  renderer.setSize(W,H,false);camera.aspect=W/H;camera.updateProjectionMatrix();
-  const dist=wide?4.2:4.9;camera.position.set(0,.45,dist);camera.lookAt(0,.05,0);
-}
-window.addEventListener("resize",resize);resize();
-
-/* motion */
-const reduce=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-let angle=-.6,lastY=window.scrollY,spinBoost=0,mx=0,my=0,tx=0,ty=0,last=performance.now();
-window.addEventListener("scroll",()=>{const y=window.scrollY;spinBoost+=Math.min(Math.abs(y-lastY),200)*.0025;lastY=y},{passive:true});
-window.addEventListener("pointermove",e=>{tx=(e.clientX/W-.5);ty=(e.clientY/H-.5)},{passive:true});
-function frame(now){
-  const dt=Math.min((now-last)/1000,.05);last=now;
-  const docH=Math.max(1,document.documentElement.scrollHeight-H),sp=Math.min(Math.max(window.scrollY/docH,0),1);
-  spinBoost*=.92;
-  angle+=dt*(reduce?.06:.32)+(reduce?0:spinBoost*dt*6);
-  mx+=(tx-mx)*.05;my+=(ty-my)*.05;
-  pivot.rotation.y=angle+mx*.5;
-  pivot.rotation.x=.08+my*.12;
-  const side=wide?1.05:0;
-  pivot.position.x=reduce?side:side*Math.cos(sp*Math.PI);
-  pivot.position.y=(wide?.08:.35)-(reduce?0:Math.sin(sp*Math.PI)*.12);
-  const sc=wide?1:.82;pivot.scale.setScalar(sc);
-  if(!reduce){rear.rotation.z-=dt*3.2;front.rotation.z-=dt*3.2;crank.rotation.z-=dt*1.6}
-  haloA.rotation.z+=dt*.2;haloB.rotation.z-=dt*.12;
-  renderer.render(scene,camera);
+  const el=document.getElementById("bk");if(!el)return;
+  const reduce=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let tx=0,ty=0,mx=0,my=0,boost=0,lastY=window.scrollY;
+  window.addEventListener("pointermove",e=>{tx=e.clientX/window.innerWidth-.5;ty=e.clientY/window.innerHeight-.5},{passive:true});
+  window.addEventListener("scroll",()=>{const y=window.scrollY;boost=Math.min(boost+Math.abs(y-lastY)*.02,8);lastY=y},{passive:true});
+  function frame(now){
+    const t=now/1000,wide=window.innerWidth>=900;
+    const docH=Math.max(1,document.documentElement.scrollHeight-window.innerHeight);
+    const sp=Math.min(Math.max(window.scrollY/docH,0),1);
+    mx+=(tx-mx)*.06;my+=(ty-my)*.06;boost*=.93;
+    const x=wide?22*Math.cos(sp*Math.PI):0;
+    const y=wide?6+Math.sin(sp*Math.PI)*-4:8;
+    const sway=reduce?0:Math.sin(t*.45)*14+boost*(Math.sin(t*3)*.6);
+    const fl=reduce?0:Math.sin(t*.9)*8;
+    el.style.transform=`translate(calc(-50% + ${x.toFixed(2)}vw), calc(-50% + ${y.toFixed(2)}vh + ${fl.toFixed(1)}px)) rotateY(${(sway+mx*16).toFixed(2)}deg) rotateX(${(-my*8).toFixed(2)}deg) rotateZ(${(mx*-1.5).toFixed(2)}deg)`;
+    requestAnimationFrame(frame);
+  }
   requestAnimationFrame(frame);
-}
-requestAnimationFrame(frame);
 })();
 </script>
+
+
+
 
 <script>
 (function(){
