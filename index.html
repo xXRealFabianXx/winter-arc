@@ -923,50 +923,42 @@ async function bootDb(){
   render();
 }
 
-/* ================= Strava (mcp) ================= */
-let MCP=null,retried=false;
-const pay=r=>r&&(r.payload!==undefined?r.payload:r);
+/* ================= Strava (own API) ================= */
+const pay=r=>r;
 function setLive(t,on){$("liveText").textContent=t;$("led").classList.toggle("on",!!on)}
-async function load(force){
-  if(!MCP)return;setLive("Strava lädt",false);$("refresh").disabled=true;
-  const opt={cache:force?{staleTime:120000,refresh:true}:{staleTime:120000}};
+const LOGIN_NOTE='Verbinde einmal dein Strava-Konto. Danach erscheinen hier deine Aktivitäten, Ringe und Abzeichen. <a class="pill btn" href="/api/auth/login" style="text-decoration:none">Mit Strava verbinden</a>';
+function applyStrava(P){
+  S.acts=(P.activities||[]).map(norm);S.stamp=P.fetchedAt||Date.now();
+  const A=P.athlete||{};S.name=A.first_name||null;S.weight=A.weight||null;S.ftp=A.ftp||null;
+  let base=null;try{base=+localStorage.getItem("wa.ftpBase")||null}catch(_){}
+  if(!base&&S.ftp){base=S.ftp;try{localStorage.setItem("wa.ftpBase",String(S.ftp))}catch(_){}}
+  S.ftpBase=base;
+  const bikes=A.bikes||[],b=bikes.find(x=>x.primary&&!x.retired)||bikes.find(x=>!x.retired);
+  if(b)S.bike={name:b.name,km:b.km};
+}
+const stampTxt=()=>new Date(S.stamp).toLocaleString("de-DE",{day:"numeric",month:"numeric",hour:"2-digit",minute:"2-digit"});
+async function load(){
+  setLive("Strava lädt",false);$("refresh").disabled=true;
   try{
-    const acts=[];let after=null,stamp=null;
-    for(let p=0;p<5;p++){
-      const input={range_start:"2026-09-14T00:00:00",ordering:"StartDateLocalAsc",first:100};if(after)input.after=after;
-      const r=await MCP.callTool("Strava","list_activities",input,opt);if(r&&r.cache&&r.cache.storedAt)stamp=r.cache.storedAt;
-      const P=pay(r)||{};(P.activities||[]).forEach(a=>acts.push(norm(a)));if(!P.has_next_page||!P.end_cursor)break;after=P.end_cursor;
-    }
-    S.acts=acts;S.live=true;S.stamp=stamp||Date.now();
-    const rs=await Promise.allSettled([MCP.callTool("Strava","get_athlete_zones",{},opt),MCP.callTool("Strava","get_athlete_zones",{as_of_date:"2026-10-11"},{cache:{staleTime:300000,gcTime:86400000}}),MCP.callTool("Strava","get_athlete_profile",{},opt),MCP.callTool("Strava","get_gear",{gear_types:["Bike"]},opt)]);
-    if(rs[3].status==="fulfilled"){const g=pay(rs[3].value);const b=g&&(g.gear||[]).find(x=>!x.retired);if(b)S.bike={name:b.name||"Rad",km:(b.total_distance||0)/1000}}
-    if(rs[0].status==="fulfilled"){const z=pay(rs[0].value);if(z&&z.ftp)S.ftp=z.ftp}
-    if(rs[1].status==="fulfilled"){const z=pay(rs[1].value);if(z&&z.ftp)S.ftpBase=z.ftp}
-    if(!S.ftpBase&&S.ftp&&TODAY<"2026-10-12")S.ftpBase=S.ftp;
-    if(rs[2].status==="fulfilled"){const p=pay(rs[2].value);if(p){S.name=p.first_name||null;S.weight=p.weight||null}}
-    notice(null);setLive("Strava · "+new Date(S.stamp).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"}),true);
-  }catch(e){handleErr(e,force)}
+    const r=await fetch("/api/strava",{credentials:"same-origin",cache:"no-store"});
+    if(r.status===401){S.live=false;notice(LOGIN_NOTE);setLive("Strava nicht verbunden",false);return}
+    if(r.status===429){notice("Strava bremst gerade, weil zu viele Abrufe kamen. Tippe in 15 Minuten wieder auf „Aktualisieren“.");setLive(S.live?"Strava · "+stampTxt():"Strava pausiert",S.live);return}
+    if(!r.ok){notice("Strava antwortet gerade nicht. Tippe später auf „Aktualisieren“.");setLive(S.live?"Strava · "+stampTxt():"Strava offline",S.live);return}
+    const P=await r.json();applyStrava(P);S.live=true;
+    try{localStorage.setItem("wa.cache",JSON.stringify(P))}catch(_){}
+    notice(null);setLive("Strava · "+stampTxt(),true);
+  }catch(_){notice("Keine Verbindung. Deine letzten Daten bleiben sichtbar.");setLive(S.live?"Strava · "+stampTxt():"Offline",S.live)}
   finally{$("refresh").disabled=false;render()}
 }
-function handleErr(e,force){
-  const c=e&&e.code;
-  if(e&&e.retryable&&!retried){retried=true;setLive("Neuer Versuch",false);setTimeout(()=>load(force),(e.retryAfterMs||1500)+Math.random()*1000);return}
-  if(c==="needs_reauth"){S.live=false;notice("Die Strava-Verbindung ist abgelaufen. Verbinde Strava in claude.ai unter Einstellungen → Connectors neu und tippe dann auf „Aktualisieren“.")}
-  else if(c==="server_not_connected"||c==="selection_required"||c==="server_not_found"){S.live=false;notice("Strava ist nicht verbunden. Füge Strava in claude.ai unter Einstellungen → Connectors hinzu und tippe dann auf „Aktualisieren“.")}
-  else if(c==="not_in_manifest"||c==="approval_required"){S.live=false;notice('Diese Seite darf Strava gerade nicht lesen. <button class="pill btn" type="button" id="perm">Berechtigungen öffnen</button>');const b=$("perm");if(b)b.addEventListener("click",openPerms)}
-  else if(c==="blocked_by_policy"){S.live=false;notice("Strava ist für dein Konto durch eine Richtlinie gesperrt.")}
-  else notice("Strava-Daten konnten nicht geladen werden"+(e&&e.message?": "+esc(e.message):"")+". Tippe später auf „Aktualisieren“.");
-  setLive(S.live?"Strava · letzter Stand":"Strava offline",S.live);
-}
-async function openPerms(){try{const p=await window.claude.use("permissions");if(p)await p.manage()}catch(_){notice("Öffne die Berechtigungen über das Menü dieser Seite und erlaube Strava.")}}
-$("refresh").addEventListener("click",()=>{retried=false;load(true)});
+$("refresh").addEventListener("click",()=>load());
 
 render();
-(async function boot(){
+(function boot(){
   bootDb();
-  let m=null;try{m=window.claude&&window.claude.use?await window.claude.use("mcp"):null}catch(_){m=null}
-  if(!m){setLive("Strava folgt",false);$("refresh").disabled=true;notice("Strava wird im nächsten Schritt angebunden. Plan, Ruhetage und Haken funktionieren schon und werden in diesem Browser gespeichert.");return}
-  MCP=m;load(false);
+  try{const c=JSON.parse(localStorage.getItem("wa.cache")||"null");if(c){applyStrava(c);S.live=true;setLive("Strava · "+stampTxt(),true);render()}}catch(_){}
+  const q=new URLSearchParams(location.search).get("strava");
+  if(q){const m={ok:"Strava verbunden",abgelehnt:"Strava-Verbindung abgebrochen",rechte:"Bitte erlaube den Zugriff auf deine Aktivitäten",fehler:"Strava-Verbindung fehlgeschlagen, versuch es nochmal"}[q];if(m)toast(m);try{history.replaceState(null,"",location.pathname)}catch(_){}}
+  load();
 })();
 })();
 </script>
