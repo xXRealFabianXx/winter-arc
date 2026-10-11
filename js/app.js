@@ -720,6 +720,7 @@ function loadState() {
   const C = L.load("wa.checks"), CC = {}; Object.keys(C).forEach((k) => { const v = C[k]; if (v && Array.isArray(v.ex)) CC[k] = { key: v.key, ex: v.ex.slice() }; }); S.C = CC;
   recalcFtp();
 }
+const ASSET_V = "28";
 function bootDb() { DB = makeDB(); S.dbOK = true; S.sync = "local"; loadState(); }
 async function syncRemote() {
   try {
@@ -806,4 +807,12 @@ setInterval(dayCheck, 60000);
   go((location.hash || "#heute").slice(1), false);
   load();
   Focus.resume();
+  loadStage();
+  if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("/sw.js").catch(() => {});
 })();
+// 3D comes after the content: the page is usable first, the stage fades in when three.js is ready
+function loadStage() {
+  const add = (src, cb) => { const s = document.createElement("script"); s.src = src; s.crossOrigin = "anonymous"; s.onload = cb; s.onerror = () => {}; document.head.appendChild(s); };
+  const go3d = () => add("https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js", () => add("/js/stage.js?v=" + ASSET_V, () => { if (window.Stage) { Stage.show(view); render(); } }));
+  if ("requestIdleCallback" in window) requestIdleCallback(go3d, { timeout: 600 }); else setTimeout(go3d, 200);
+}

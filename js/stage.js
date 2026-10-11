@@ -10,7 +10,7 @@
   try { renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: "low-power" }); }
   catch (_) { canvas.remove(); return; }
   document.documentElement.classList.add("has3d");
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, window.innerWidth < 700 ? 1.5 : 1.75));
   renderer.outputEncoding = THREE.sRGBEncoding;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.05;
@@ -256,6 +256,7 @@
   let last = performance.now(), t0 = last;
   function frame(now) {
     requestAnimationFrame(frame);
+    if (document.body.classList.contains("focus-open")) { last = now; return; } // training mode covers the stage: save battery
     const dt = Math.min((now - last) / 1000, 0.05); last = now; const t = (now - t0) / 1000;
     const sY = window.scrollY, fade = Math.max(0, 1 - sY / (H * 0.9));
     canvas.style.opacity = (0.15 + 0.85 * fade).toFixed(3);

@@ -104,6 +104,7 @@ function norm(a){const s=a.summary||{},st=a.start_local||"";
 function gymKey(n){n=n.toLowerCase();if(/ober|upper/.test(n))return "upper";if(/bein|bene|leg|rdl|squat|kniebeuge/.test(n))return "legs";if(/pull|rücken|ruecken|back|latzug/.test(n))return "pull";if(/push|brust|chest|schräg|bank/.test(n))return "push";return null}
 
 /* ================= Planner ================= */
+const PLAN_MEMO=new Map();
 function planWeek(w,prevLegs,byDate){
   const pool=new Set(KEYS),days=[];
   for(let d=0;d<7;d++){
@@ -166,17 +167,28 @@ function planWeek(w,prevLegs,byDate){
         if(a.includes("int")&&b.includes("long"))s-=10;
       }
     }return s};
-  let best=null,bestS=-1e9;
-  const cur=fixed.map(a=>a.slice()),used=new Set();
-  (function dfs(j){
-    if(j===free.length){if(valid(cur)){const s=score(cur);if(s>bestS){bestS=s;best=cur.map(a=>a.slice())}}return}
-    const d=free[j];
-    for(const k of rem){if(used.has(k))continue;
-      if(CAT[k]==="bike"&&hasLegs(cur,d-1))continue;
-      if(k==="legs"&&d<6&&!free.includes(d+1)&&hasBike(cur,d+1))continue;
-      used.add(k);cur[d]=[k];dfs(j+1);cur[d]=fixed[d].slice();used.delete(k)}
-    dfs(j+1);
-  })(0);
+  // exhaustive search with an exact upper bound (penalties are never positive) + memo: same result, ~100x faster
+  const term=(k,d)=>PRIO[k]-6*Math.abs(d-DEF[k])+(k==="long"?(d===5?35:d===6?28:0):0);
+  const mk=JSON.stringify([free,rem,fixed,prevLegs,days.map(x=>x.pinned?1:0)]);
+  let best=PLAN_MEMO.get(mk)||null;
+  if(!best){
+    let bestS=-1e9;
+    const pinC=days.reduce((t,x)=>t+(x.pinned?x.keys.reduce((u,k)=>u+term(k,x.d),0):0),0);
+    const cur=fixed.map(a=>a.slice()),used=new Set();
+    const opt=(j)=>{let o=0;for(const k of rem){if(used.has(k))continue;let m=0;for(let q=j;q<free.length;q++){const v=term(k,free[q]);if(v>m)m=v}o+=m}return o};
+    (function dfs(j,acc){
+      if(j===free.length){if(valid(cur)){const s=score(cur);if(s>bestS){bestS=s;best=cur.map(a=>a.slice())}}return}
+      if(best&&pinC+acc+opt(j)<=bestS)return;
+      const d=free[j];
+      for(const k of rem){if(used.has(k))continue;
+        if(CAT[k]==="bike"&&hasLegs(cur,d-1))continue;
+        if(k==="legs"&&d<6&&!free.includes(d+1)&&hasBike(cur,d+1))continue;
+        used.add(k);cur[d]=[k];dfs(j+1,acc+term(k,d));cur[d]=fixed[d].slice();used.delete(k)}
+      dfs(j+1,acc);
+    })(0,0);
+    if(best){if(PLAN_MEMO.size>400)PLAN_MEMO.clear();PLAN_MEMO.set(mk,best)}
+  }
+  best=best&&best.map(a=>a.slice());
   if(!best)best=fixed;
   const placed=new Set();
   days.forEach(x=>{
