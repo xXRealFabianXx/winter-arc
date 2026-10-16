@@ -117,7 +117,11 @@ function planWeek(w,prevLegs,byDate){
   days.filter(x=>x.locked).forEach(x=>{
     let absorb=null; // the session logged on the site and the Strava/Garmin recording of it count once
     if(x.e.manual){const k=pool.has(x.e.manual)?x.e.manual:null;if(k){pool.delete(k);x.done.push({k:k,manual:true});absorb=CAT[k]}}
-    x.acts.slice().sort((a,b)=>b.min-a.min).forEach(a=>{
+    // all rides of one day are one bike unit (e.g. two Zwift sessions): merged, times and distances added up
+    const rides=x.acts.filter(a=>a.cat==="bike"),dayActs=x.acts.filter(a=>a.cat!=="bike");
+    if(rides.length>1){const m=rides.slice().sort((a,b)=>b.min-a.min)[0];dayActs.push(Object.assign({},m,{name:rides.map(a=>a.name).join(" + "),min:rides.reduce((t,a)=>t+a.min,0),km:rides.reduce((t,a)=>t+a.km,0),hm:rides.reduce((t,a)=>t+a.hm,0),parts:rides}))}
+    else dayActs.push(...rides);
+    dayActs.sort((a,b)=>b.min-a.min).forEach(a=>{
       if(absorb&&a.cat===absorb){absorb=null;const o=x.done.find(d=>d.manual&&!d.a);if(o)o.a=a;return}
       if(a.cat==="other"){x.extra.push(a);return}
       let k=null;const dk=x.e.pin||KEYS[x.d];
