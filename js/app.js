@@ -248,9 +248,31 @@ function vHeute() {
   };
 }
 /* last logged values for an exercise and last note of the same session type, before a date */
+/* values from a session can be kept out of the tracking (other gym, adapted exercise): they still count as training */
+const isTracked = (L, name) => !(L && (L.noTrack || (L.skipTrack || []).includes(name)));
+function setTrack(date, key, name, on) {
+  const L = logOf(date, key);
+  if (name === "*") L.noTrack = !on;
+  else { const sk = new Set(L.skipTrack || []); if (on) sk.delete(name); else sk.add(name); L.skipTrack = [...sk]; }
+  saveLog(date);
+  toast(name === "*" ? (on ? "Einheit wird wieder gewertet" : "Ganze Einheit wird nicht gewertet") : on ? name + " wird gewertet" : name + " wird nicht gewertet");
+}
+function trackClick(b) {
+  const pressed = b.getAttribute("aria-pressed") === "true"; // exercise chip pressed = counts; "Anderes Gym" pressed = nothing counts
+  setTrack(b.dataset.date, b.dataset.k, b.dataset.track, b.dataset.track === "*" ? pressed : !pressed);
+}
+function trackPanel(date, key, names) {
+  const L = S.L[date] && S.L[date].key === key ? S.L[date] : {}, off = !!L.noTrack, skip = new Set(L.skipTrack || []);
+  const n = off ? 0 : names.filter((x) => !skip.has(x)).length;
+  const btn = (nm, label, on, cls) => `<button type="button" class="opt sm${on ? " on" : ""}${cls ? " " + cls : ""}" data-track="${esc(nm)}" data-date="${date}" data-k="${key}" aria-pressed="${on}"${off && nm !== "*" ? " disabled" : ""}><b>${label}</b></button>`;
+  return `<details class="trackp"${off || skip.size ? " open" : ""}><summary><span class="fb-q">Werten</span><span class="label">${off ? "Ganze Einheit nicht gewertet" : skip.size ? n + " von " + names.length + " gewertet" : "Alle Werte zählen"}</span></summary>
+    <p class="tp-hint">Für ein fremdes Gym oder eine abgewandelte Übung: Ausgeschaltete Übungen zählen als Training, ihre Gewichte tauchen beim nächsten Mal aber nicht als „Zuletzt“ auf.</p>
+    <div class="fb-row">${btn("*", off ? "Anderes Gym · nichts gewertet" : "Anderes Gym · ganze Einheit nicht werten", off, "tp-all")}</div>
+    <div class="fb-row tp-ex">${names.map((nm) => btn(nm, (!off && !skip.has(nm) ? "✓ " : "") + esc(nm), !off && !skip.has(nm))).join("")}</div></details>`;
+}
 function lastLog(name, before) {
   const ds = Object.keys(S.L).filter((d) => d < before).sort().reverse();
-  for (const d of ds) { const e = S.L[d].ex && S.L[d].ex[name]; if (e && (e.kg || e.r)) return Object.assign({ date: d }, e); }
+  for (const d of ds) { if (!isTracked(S.L[d], name)) continue; const e = S.L[d].ex && S.L[d].ex[name]; if (e && (e.kg || e.r)) return Object.assign({ date: d }, e); }
   return null;
 }
 function lastNote(key, before) {
@@ -284,7 +306,7 @@ function exChecklist(day, s) {
     const plan = s.test ? "6 Wdh. Test" : e.s + "×" + e.r;
     return `<div class="exlog${done ? " on" : ""}${e.extra ? " extra" : ""}${canPlan ? " sortable" : ""}" data-sort-id="${esc(e.n)}">${canPlan ? `<span class="grip" aria-label="${esc(e.n)} verschieben: festhalten und ziehen" role="button" tabindex="0">⠿</span>` : ""}
       <button type="button" class="ex-h" data-ex="${esc(e.n)}" data-date="${day.date}" data-k="${s.key}" aria-pressed="${done}" ${can ? "" : "disabled"}><span class="box">✓</span><span class="nm">${esc(e.n)}</span><span class="sx">${e.extra ? "nachholen" : e.added ? "zusätzlich" : esc(plan)}</span></button>${canPlan ? `<button type="button" class="ex-rm" data-exrm="${esc(e.n)}" data-date="${day.date}" data-k="${s.key}" aria-label="${esc(e.n)} aus diesem Training entfernen">✕</button>` : ""}
-      ${prev ? `<span class="prev">Zuletzt ${esc(logTxt(prev))} · ${DOW[(idx(prev.date) % 7 + 7) % 7]} ${dm(prev.date)}</span>` : ""}
+      ${!isTracked(log, e.n) ? `<span class="prev untracked">Wird nicht gewertet</span>` : ""}${prev ? `<span class="prev">Zuletzt ${esc(logTxt(prev))} · ${DOW[(idx(prev.date) % 7 + 7) % 7]} ${dm(prev.date)}</span>` : ""}
       ${can ? `<div class="lg"><label><span>kg</span><input type="number" inputmode="decimal" step="0.5" min="0" max="500" value="${L.kg || ""}" placeholder="${prev && prev.kg ? fN(prev.kg, 1) : "–"}" data-log="kg" data-ex="${esc(e.n)}" data-date="${day.date}" data-k="${s.key}" aria-label="${esc(e.n)} Gewicht"></label>
         <label><span>Sätze</span><input type="number" inputmode="numeric" step="1" min="1" max="10" value="${L.s || ""}" placeholder="${s.test ? 1 : e.s}" data-log="s" data-ex="${esc(e.n)}" data-date="${day.date}" data-k="${s.key}" aria-label="${esc(e.n)} Sätze"></label>
         <label><span>Wdh.</span><input type="number" inputmode="numeric" step="1" min="1" max="50" value="${L.r || ""}" placeholder="${prev && prev.r ? prev.r : s.test ? 6 : 8}" data-log="r" data-ex="${esc(e.n)}" data-date="${day.date}" data-k="${s.key}" aria-label="${esc(e.n)} Wiederholungen"></label></div>` : (L.kg || L.r ? `<span class="prev" style="color:var(--ink2)">${esc(logTxt(L))}</span>` : "")}
@@ -295,6 +317,7 @@ function exChecklist(day, s) {
     <div class="card-h"><span class="label">${can ? "Übungen eintragen" : canPlan ? "Übungen anpassen" : "Übungen"}</span><span class="label num" style="color:${n === list.length ? "var(--done)" : "var(--muted)"}">${n}/${list.length}</span></div>
     <div class="track"><i style="width:${Math.round((n / list.length) * 100)}%"></i></div>
     <div class="exlist"${canPlan ? ` data-sort="sess|${day.date}|${s.key}"` : ""}>${items}</div>${addForm}
+    ${can && !s.test ? trackPanel(day.date, s.key, list.map((e) => e.n)) : ""}
     ${can && (Object.keys(log.ex || {}).length || on.size || (S.E[day.date] && S.E[day.date].manual)) && !Focus.isLive(day.date) ? `<button type="button" class="btn ghost-danger sm" data-clearday="${day.date}" data-label="Einträge dieses Trainings löschen">Einträge dieses Trainings löschen</button>` : ""}
     ${can ? `<label class="note"><span class="label">Notiz zum Training</span><textarea rows="2" maxlength="600" placeholder="z. B. Schulter zwickt, nächstes Mal 2,5 kg mehr" data-note="${day.date}" data-k="${s.key}">${esc(log.note || "")}</textarea></label>
     <span class="label" style="letter-spacing:.06em">Antippen hakt ab, Gewicht eintragen auch. ✕ entfernt eine Übung nur aus diesem Training, dauerhaft änderst du sie unter Kraft → Übungen.</span>` : canPlan ? `<span class="label" style="letter-spacing:.06em">Abhaken und Gewichte am Trainingstag. Hinzufügen und ✕ gelten nur für dieses Training.</span>` : log.note ? `<div class="lastnote"><span class="label">Notiz</span><p>${esc(log.note)}</p></div>` : ""}</div>`;
@@ -541,6 +564,7 @@ $("main").addEventListener("click", (e) => {
   const ed = t.closest("[data-exed]"); if (ed && !ed.disabled) { editEx(ed.dataset.exed, ed.dataset.k, +ed.dataset.n, +ed.dataset.d || 0); return; }
   const kt = t.closest("[data-ktab]"); if (kt) { kraftTab = kt.dataset.ktab; render(); return; }
   const rd = t.closest("[data-round]"); if (rd) { testRound = +rd.dataset.round; render(); return; }
+  const tr = t.closest("[data-track]"); if (tr && !tr.disabled) { trackClick(tr); render(); return; }
   if (t.closest("[data-gcheck]")) { GW.st = null; loadGarmin(); return; }
   if (t.closest("[data-spcheck]")) { SPOT.st = null; SPOT.lists = null; render(); return; }
   const dsc = t.closest("[data-discard]"); if (dsc) { Focus.confirmReset(dsc, dsc.dataset.discard); return; }
@@ -863,7 +887,7 @@ function loadState() {
   const C = L.load("wa.checks"), CC = {}; Object.keys(C).forEach((k) => { const v = C[k]; if (v && Array.isArray(v.ex)) CC[k] = { key: v.key, ex: v.ex.slice() }; }); S.C = CC;
   recalcFtp();
 }
-const ASSET_V = "33";
+const ASSET_V = "34";
 function bootDb() { DB = makeDB(); S.dbOK = true; S.sync = "local"; loadState(); }
 async function syncRemote() {
   try {

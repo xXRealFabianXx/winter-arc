@@ -220,8 +220,9 @@ const Focus = (function () {
       const sets = x.s || 1, last = lastLog(x.n, F.date);
       for (let i = 0; i < sets; i++) { tot++; const z = setOf(x.n, i); if (z && z.done) dn++; }
       const tag = x.extra ? "Nachholen · " : x.added ? "Zusätzlich · " : "";
-      return `<section class="f-excard" data-sort-id="${esc(x.n)}"><div class="f-exh"><span class="grip" role="button" tabindex="0" aria-label="${esc(x.n)} verschieben: festhalten und ziehen">⠿</span>
-        <div class="f-exn"><b class="${x.n.length > 13 ? "long" : ""}">${esc(x.n)}</b><span class="label">${tag}${s.test ? "Test · 6 saubere Wdh." : esc(sets + " × " + x.r + " Wdh.")}${last ? " · zuletzt " + esc(logTxt(last)) : ""}</span></div>
+      const untr = !isTracked(S.L[F.date], x.n);
+      return `<section class="f-excard${untr ? " untracked" : ""}" data-sort-id="${esc(x.n)}"><div class="f-exh"><span class="grip" role="button" tabindex="0" aria-label="${esc(x.n)} verschieben: festhalten und ziehen">⠿</span>
+        <div class="f-exn"><b class="${x.n.length > 13 ? "long" : ""}">${esc(x.n)}</b><span class="label">${untr ? "Nicht gewertet · " : ""}${tag}${s.test ? "Test · 6 saubere Wdh." : esc(sets + " × " + x.r + " Wdh.")}${last ? " · zuletzt " + esc(logTxt(last)) : ""}</span></div>
         <button type="button" class="f-rm" data-frm="${esc(x.n)}" aria-label="${esc(x.n)} aus diesem Training entfernen">✕</button></div>${setTable(x, sets, last)}
         <div class="f-setsadj"><button type="button" class="btn sm" data-fsets="-1" data-n="${esc(x.n)}" data-cur="${sets}" ${sets <= 1 ? "disabled" : ""}>− Satz</button><span class="label">${sets} ${sets === 1 ? "Satz" : "Sätze"}</span><button type="button" class="btn sm" data-fsets="1" data-n="${esc(x.n)}" data-cur="${sets}" ${sets >= 10 ? "disabled" : ""}>+ Satz</button></div></section>`;
     }).join("");
@@ -232,6 +233,7 @@ const Focus = (function () {
       ${ln ? `<div class="lastnote"><span class="label">Notiz vom letzten Mal · ${dm(ln.date)}</span><p>${esc(ln.note)}</p></div>` : ""}
       <div class="f-exlist" data-sort="sess|${F.date}|${F.key}">${cards || `<p class="empty">Keine Übungen. Füg unten welche hinzu.</p>`}</div>
       <button type="button" class="btn f-addwide" data-f="addopen">+ Übung hinzufügen</button>
+      ${s.test ? "" : trackPanel(F.date, F.key, items.map((x) => x.n))}
       <span class="label" style="letter-spacing:.06em">Kreis antippen hakt den Satz ab. Gewicht und Wiederholungen sind optional, trag sie ein, wann du willst. Reihenfolge am Griff ⠿ ändern.</span>
       <button type="button" class="btn kraft f-cta" data-f="summary">Training abschließen</button>
       <button type="button" class="btn ghost-danger" data-f="reset" data-label="Training verwerfen">Training verwerfen</button></div>`;
@@ -330,6 +332,7 @@ const Focus = (function () {
   /* ---------- events ---------- */
   document.addEventListener("click", (ev) => {
     const f = el(); if (!f || f.hidden || !f.contains(ev.target)) return;
+    const tr = ev.target.closest("[data-track]"); if (tr && !tr.disabled && F) { trackClick(tr); draw(); return; }
     const fb = ev.target.closest("[data-fb]"); if (fb) { setFeedback(fb.dataset.date, fb.dataset.fb, fb.dataset.val); draw(); return; }
     const j = ev.target.closest("[data-fj]"); if (j) { jump(+j.dataset.fj); return; }
     const fs0 = ev.target.closest("[data-fset][data-n]"); if (fs0 && F && F.cat === "gym" && F.phase !== "summary") {

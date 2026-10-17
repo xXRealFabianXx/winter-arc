@@ -612,3 +612,16 @@ body.focus-open{overflow:hidden}
 .lc-grid{stroke:var(--line);stroke-width:1}
 .lc-ax{font:10px var(--mono);fill:var(--muted)}
 .lc-x{stroke:var(--line-hi);stroke-width:1;stroke-dasharray:3 3}
+/* Werten (tracking on/off per exercise) */
+.trackp{border-top:1px dashed var(--line-hi);padding-top:12px;margin-top:4px}
+.trackp summary{display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer;list-style:none;min-height:40px}
+.trackp summary::-webkit-details-marker{display:none}
+.trackp summary::after{content:"+";color:var(--muted);font-size:1.2rem;margin-left:4px}
+.trackp[open] summary::after{content:"–"}
+.trackp .tp-hint{font-size:.84rem;color:var(--muted);margin:6px 0 10px;line-height:1.45}
+.trackp .fb-row{margin-bottom:8px}
+.trackp .tp-ex .opt:not(.on){opacity:.6;text-decoration:line-through;text-decoration-color:var(--muted)}
+.trackp .tp-all.on{border-color:var(--rad2);color:var(--rad2)}
+.f-excard.untracked{opacity:.62}
+.f-excard.untracked .f-exn .label{color:var(--rad2)}
+.prev.untracked{color:var(--rad2)}
