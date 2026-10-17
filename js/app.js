@@ -177,10 +177,10 @@ function rideStats(a) {
   if (a.hr) st.push([fN(Math.round(a.hr)), "Ø Puls"]);
   return `<div class="ride-stats" style="--n:${st.length}">${st.map(([v, u]) => `<span><b class="num">${v}</b><small>${u}</small></span>`).join("")}</div>`;
 }
-function rideBlock(a) {
+function rideBlock(a, noKind) {
   if (!a) return "";
   const svg = a.poly ? routeSvg(a.poly) : "";
-  return `<div class="ride">${svg ? `<div class="route-wrap">${svg}</div>` : ""}<div class="ride-info"><div class="ride-meta"><b>${esc(a.name)}</b><a class="label" href="https://www.strava.com/activities/${encodeURIComponent(a.id)}" target="_blank" rel="noopener">${dm(a.date)} · Auf Strava ↗</a></div>${rideStats(a)}</div></div>`;
+  return `<div class="ride">${svg ? `<div class="route-wrap">${svg}</div>` : ""}<div class="ride-info">${(() => { const kd = !noKind && rideKind(a); return kd ? `<span class="chip rad ride-kind" title="${esc(kd.detail || "")}"><i></i>${esc(kd.title)}</span>` : ""; })()}<div class="ride-meta"><b>${esc(a.name)}</b><a class="label" href="https://www.strava.com/activities/${encodeURIComponent(a.id)}" target="_blank" rel="noopener">${dm(a.date)} · Auf Strava ↗</a></div>${rideStats(a)}</div></div>`;
 }
 const lastRide = () => S.acts.filter((a) => a.cat === "bike").sort((x, y) => (x.date < y.date ? 1 : x.date > y.date ? -1 : (y.hour || 0) - (x.hour || 0)))[0] || null;
 const recentList = (cat, n) => {
@@ -207,19 +207,19 @@ function vHeute() {
     else { heroTitle = s.cat === "bike" ? "Rad" : "Kraft"; heroCls = s.cat === "bike" ? "grad-rad" : "grad-kraft"; heroSub = s.title + " · " + s.min + " Minuten"; }
     let body = "";
     if (s) {
-      body += `<span class="label">${isToday ? "Geplantes Training" : "Erstes Training"}</span><div class="card-h"><span class="chip ${catCls(s.cat)}"><i></i>${catName(s.cat)} · ${s.min}′</span>${day.status === "done" ? `<span class="chip done">Erledigt</span>` : day.pinned ? `<span class="chip pin">Festgelegt</span>` : ""}</div>
+      body += `<span class="label">${s.detected ? "Gefahren · erkannt aus Strava" : isToday ? "Geplantes Training" : "Erstes Training"}</span><div class="card-h"><span class="chip ${catCls(s.cat)}"><i></i>${catName(s.cat)} · ${s.min}′</span>${day.status === "done" ? `<span class="chip done">Erledigt</span>` : day.pinned ? `<span class="chip pin">Festgelegt</span>` : ""}</div>
         <div class="t-title ${s.cat === "bike" ? "grad-rad" : "grad-kraft"}">${esc(s.title)}</div>
         <div class="t-detail">${esc(s.cat === "bike" ? fillW(s.detail) : s.test ? s.detail : s.detail + " · " + RIR(w))}</div>`;
-      if (s.cat === "bike") body += `<div class="specs">${S.ftp ? `<span class="spec"><span>Z2</span>${fillW("{Z2}")}</span><span class="spec"><span>FTP</span>${S.ftp} W</span>` : `<span class="spec"><span>Zonen</span>in % FTP</span>`}<span class="spec"><span>Dauer</span>${s.min}′</span></div>`;
+      if (s.cat === "bike" && !s.detected) body += `<div class="specs">${S.ftp ? `<span class="spec"><span>Z2</span>${fillW("{Z2}")}</span><span class="spec"><span>FTP</span>${S.ftp} W</span>` : `<span class="spec"><span>Zonen</span>in % FTP</span>`}<span class="spec"><span>Dauer</span>${s.min}′</span></div>`;
       if (s.ex) body += exChecklist(day, logSess(day, s));
       const ride = day.acts.filter((x) => x.cat === "bike").sort((x, y) => y.km - x.km)[0];
-      if (ride) body += rideBlock(ride);
+      if (ride) body += rideBlock(ride, s.detected);
       if (day.status === "done" || (isToday && day.done.length)) body += feedbackBlock(day, s);
     } else {
       body += `<div class="t-title">${day.status === "rest" ? "Ruhetag" : "Frei"}</div><div class="t-detail">${day.status === "rest" ? "Eingetragen. Die übrigen Einheiten rücken nach." : "Keine Einheit geplant. Leg eine fest, wenn du Lust hast."}</div>`;
     }
     let a = "";
-    if (isToday && k) { const ls = s.cat === "gym" ? logSess(day, s) : s; a += `<button class="btn ${s.cat === "bike" ? "rad" : "kraft"} start" type="button" data-start="${ls.key}" data-date="${day.date}">${Focus.isLive(day.date) ? "▶ Training fortsetzen" : "▶ Training starten"}</button>`; }
+    if (isToday && k && !s.detected) { const ls = s.cat === "gym" ? logSess(day, s) : s; a += `<button class="btn ${s.cat === "bike" ? "rad" : "kraft"} start" type="button" data-start="${ls.key}" data-date="${day.date}">${Focus.isLive(day.date) ? "▶ Training fortsetzen" : "▶ Training starten"}</button>`; }
     if (isToday && Focus.isLive(day.date)) a += `<button class="btn ghost-danger" type="button" data-discard="${day.date}" data-label="Training verwerfen">Training verwerfen</button>`;
     if (isToday && (!s || s.cat === "bike" || day.status === "rest")) a += `<button class="btn" type="button" data-start="free" data-date="${day.date}">Einfach fahren</button>`;
     if (isToday && day.status !== "done" && k) a += `<button class="btn" type="button" data-act="manual" data-k="${k}" ${canWrite ? "" : "disabled"}>✓ Erledigt</button>`;
@@ -850,7 +850,7 @@ function loadState() {
   const C = L.load("wa.checks"), CC = {}; Object.keys(C).forEach((k) => { const v = C[k]; if (v && Array.isArray(v.ex)) CC[k] = { key: v.key, ex: v.ex.slice() }; }); S.C = CC;
   recalcFtp();
 }
-const ASSET_V = "31";
+const ASSET_V = "32";
 function bootDb() { DB = makeDB(); S.dbOK = true; S.sync = "local"; loadState(); }
 async function syncRemote() {
   try {
@@ -906,7 +906,7 @@ async function load() {
     const P = await r.json(); applyStrava(P); S.live = true;
     try { localStorage.setItem("wa.cache", JSON.stringify(P)); } catch (_) {}
     notice(null); setLive("Strava", true);
-    syncRemote(); loadGarmin();
+    syncRemote(); loadGarmin(); analyzeRides();
   } catch (_) { setLive(S.live ? "Strava" : "Offline", S.live); }
   finally { render(); }
 }
@@ -960,3 +960,26 @@ function lcPoint(ev) {
 }
 document.addEventListener("pointermove", lcPoint, { passive: true });
 document.addEventListener("pointerdown", lcPoint, { passive: true });
+
+/* ride recognition: analyse new rides once (description + power), cache the result per activity */
+let analyzing = false;
+async function analyzeRides() {
+  if (analyzing) return; analyzing = true;
+  const ftp = S.ftp || 200, from = iso(-7);
+  const todo = S.acts.filter((a) => a.cat === "bike" && a.date >= from && (!RIDES[a.id] || (RIDES[a.id].power && Math.abs((RIDES[a.id].ftp || 0) - ftp) > ftp * 0.05)))
+    .sort((x, y) => (x.date < y.date ? 1 : -1)).slice(0, 10);
+  let changed = false;
+  for (const a of todo) {
+    try {
+      const r = await fetch(`/api/ride?id=${encodeURIComponent(a.id)}&ftp=${Math.round(ftp)}`, { credentials: "same-origin", cache: "no-store" });
+      if (r.status === 429 || r.status === 401) break;
+      if (r.status === 404) { RIDES[a.id] = { desc: "", power: false, blocks: [], b20: null, ftp }; changed = true; continue; }
+      if (!r.ok) continue;
+      const j = await r.json();
+      RIDES[a.id] = { desc: j.desc || "", power: !!j.power, blocks: j.blocks || [], b20: j.b20 || null, ftp: j.ftp || ftp };
+      changed = true;
+    } catch (_) { break; }
+  }
+  if (changed) { try { localStorage.setItem("wa.rides", JSON.stringify(RIDES)); } catch (_) {} render(); }
+  analyzing = false;
+}

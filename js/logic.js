@@ -50,6 +50,8 @@ const DEF={push:0,int:1,legs:2,pull:3,base:4,long:5,upper:6};
 const CAT={push:"gym",pull:"gym",legs:"gym",upper:"gym",int:"bike",base:"bike",long:"bike"};
 const PRIO={long:100,int:95,base:85,legs:80,push:70,pull:65,upper:40};
 const BI={int:0,base:1,long:2};
+/* which free slot a repeated session type fills: a 2nd Pull replaces Oberkörper first, a 2nd Grundlage the intervals, etc. */
+const SUB={push:["upper","pull","legs"],pull:["upper","push","legs"],legs:["upper","push","pull"],upper:["push","pull","legs"],int:["base","long"],base:["int","long"],long:["base","int"]};
 /* Exercises: defaults above, user's own lists (Kraft → Übungen) override them.
    Each exercise: {n: name, s: sets, r: reps}. Oberkörper = Push + Pull with at most 2 sets. */
 let EXC=null; // custom lists {push:[],pull:[],legs:[]}
@@ -75,6 +77,8 @@ function sess(k,w){
 /* session for a planned day, including feedback modifications (e.g. intervals turned easy) */
 function sessOf(x){
   const k=x.keys[0];if(!k)return null;const w=Math.floor(x.i/7),s=sess(k,w);
+  const bd=x.locked&&x.done.find(o=>o.k===k&&o.a&&o.a.cat==="bike");
+  if(bd){const kd=rideKind(bd.a);if(kd&&!(bd.manual&&kd.key!==k))return Object.assign({},s,{title:kd.title,detail:kd.detail,min:Math.round(bd.a.min),detected:true,ftp20:kd.ftp20||null})}
   if(x.mod&&x.mod.easy&&k==="int"){const b=sess("base",w);return Object.assign({},s,{title:"Locker statt "+s.title,detail:"Z2 @ {Z2}, keine Intervalle ("+x.mod.why+").",easy:true,min:Math.min(s.min,b.min)})}
   return s;
 }
@@ -101,12 +105,68 @@ const BIKE=new Set(["Ride","VirtualRide","GravelRide","MountainBikeRide","EBikeR
 const GYMT=new Set(["WeightTraining","Workout","Crossfit"]);
 function norm(a){const s=a.summary||{},st=a.start_local||"";
   return {id:String(a.id),name:a.name||"Aktivität",cat:BIKE.has(a.sport_type)?"bike":GYMT.has(a.sport_type)?"gym":"other",date:st.slice(0,10),hour:+st.slice(11,13)||0,min:(s.moving_time||0)/60,km:(s.distance||0)/1000,hm:s.elevation_gain||0,poly:a.poly||null,watts:a.watts||null,np:a.np||null,hr:a.hr||null,kmh:a.kmh||null}}
+/* ================= Ride recognition =================
+   What kind of ride was it? From your own words on Strava (title + description) and the power data:
+   sustained efforts (blocks) are measured against your FTP. Your words name the zone, the data counts the reps. */
+let RIDES={};try{RIDES=JSON.parse(localStorage.getItem("wa.rides")||"{}")||{}}catch(_){RIDES={}}
+const RZ=[{z:"VO2max",lo:1.06,min:60,tot:300,key:"int",lvl:4},{z:"Schwelle",lo:.95,min:240,tot:600,key:"int",lvl:3},{z:"Sweetspot",lo:.88,min:240,tot:600,key:"int",lvl:2},{z:"Tempo",lo:.76,min:480,tot:1200,key:"base",lvl:1}];
+const RKW=[[/ftp[\s-]*test|20\s?min\w*\s*test|ramp\s?test/,"FTP"],[/vo2|v02|30\s?\/\s?30|40\s?\/\s?20|30-30/,"VO2max"],[/schwell|threshold|over.?under|\bftp[\s-]*interv/,"Schwelle"],[/sweet\s?spot|\bss\b/,"Sweetspot"],[/\btempo\b/,"Tempo"],[/regen|recovery|ausroll|\blocker\b|\beasy\b|erholung|spin/,"Regeneration"],[/grundlage|\bga ?1\b|\bz ?2\b|zone ?2|endurance/,"Grundlage"]];
+function rideKindOne(a){
+  const info=RIDES[a.id]||null,ftp=S.ftp||null;
+  const text=((a.name||"")+" "+((info&&info.desc)||"")).toLowerCase();
+  const kwm=RKW.find(r=>r[0].test(text)),kw=kwm?kwm[1]:null;
+  const long=a.min>=150||a.km>=70;
+  const pct=w=>ftp?Math.round(w/ftp*100):null;
+  // FTP test: your word, or a 20-minute all-out block
+  const b20=info&&info.b20;
+  if(kw==="FTP"||(b20&&ftp&&b20>=.97*ftp&&info.blocks.some(b=>b[0]>=1080&&b[1]>=.95*ftp)))
+    return {key:"int",lvl:5,title:"FTP-Test",detail:b20?"Bester 20′-Schnitt "+Math.round(b20)+" W → FTP ≈ "+Math.round(b20*.95)+" W. Unter Tests eintragen.":"Den 20′-Schnitt unter Tests eintragen.",ftp20:b20||null};
+  // blocks by zone
+  let dom=null,reps=[];
+  if(info&&info.power&&ftp){
+    const bl=info.blocks.map(b=>({s:b[0],w:b[1],z:RZ.find(z=>b[1]>=z.lo*ftp)})).filter(b=>b.z&&b.s>=b.z.min);
+    for(const z of RZ){const zb=bl.filter(b=>b.z===z);if(zb.reduce((t,b)=>t+b.s,0)>=z.tot){dom=z;reps=zb;break}}
+  }
+  const kz=kw?RZ.find(z=>z.z===kw):null;
+  const zone=kz&&(dom||!info||!info.power)?kz:dom; // your word names the zone when there was a real effort (or no power data)
+  if(zone&&zone.lvl>=2||zone&&zone.lvl===1&&!long){
+    let shape="";
+    if(reps.length){
+      const m=reps.map(b=>b.s).sort((x,y)=>x-y)[Math.floor(reps.length/2)],mm=Math.round(m/60);
+      const even=reps.every(b=>Math.abs(b.s-m)<=Math.max(60,m*.3));
+      shape=reps.length>1&&even?reps.length+"×"+mm+"′":Math.round(reps.reduce((t,b)=>t+b.s,0)/60)+"′";
+    }
+    const avgW=reps.length?Math.round(reps.reduce((t,b)=>t+b.w*b.s,0)/reps.reduce((t,b)=>t+b.s,0)):null;
+    const name=zone.z+(shape?" "+shape:"");
+    const det=reps.length?(reps.length>1?reps.length+" Intervalle":"1 Block")+" · Ø "+avgW+" W"+(ftp?" ("+pct(avgW)+" % FTP)":""):"Erkannt aus deiner Beschreibung";
+    if(long)return {key:"long",lvl:zone.lvl,title:"Lang + "+name,detail:det+" · "+fH(a.min)+" h gesamt"};
+    return {key:zone.key,lvl:zone.lvl,title:zone.z==="Tempo"?"Grundlage + Tempo"+(shape?" "+shape:""):name,detail:det};
+  }
+  const np=a.np||a.watts,ifac=np&&ftp?np/ftp:null;
+  const det=np&&ftp?"Ø "+(a.np?"NP ":"")+Math.round(np)+" W ("+Math.round(ifac*100)+" % FTP)":"";
+  if(long)return {key:"long",lvl:0,title:"Lange Ausfahrt",detail:det||fH(a.min)+" h"};
+  if(kw==="Regeneration"||(ifac&&ifac<.6&&a.min<=75))return {key:"base",lvl:0,title:"Regeneration",detail:det||"Locker"};
+  if(kw==="Grundlage"||(info&&info.power)||ifac)return {key:"base",lvl:0,title:dom&&dom.z==="Tempo"?"Grundlage + Tempo":"Grundlage",detail:det||"Erkannt aus deiner Beschreibung"};
+  return null; // not analysed yet / nothing to go on: the plan decides
+}
+function rideKind(a){
+  if(!a||a.cat!=="bike")return null;
+  if(!a.parts)return rideKindOne(a);
+  const ks=a.parts.map(p=>rideKindOne(p)).filter(Boolean);if(!ks.length)return null;
+  const top=ks.sort((x,y)=>y.lvl-x.lvl)[0];
+  const long=a.min>=150||a.km>=70;
+  if(long&&top.key!=="long")return Object.assign({},top,{key:"long",title:top.lvl>0?"Lang + "+top.title:"Lange Ausfahrt"});
+  return top;
+}
 function gymKey(n){n=n.toLowerCase();if(/ober|upper/.test(n))return "upper";if(/bein|bene|leg|rdl|squat|kniebeuge/.test(n))return "legs";if(/pull|rücken|ruecken|back|latzug/.test(n))return "pull";if(/push|brust|chest|schräg|bank/.test(n))return "push";return null}
 
 /* ================= Planner ================= */
 const PLAN_MEMO=new Map();
 function planWeek(w,prevLegs,byDate){
   const pool=new Set(KEYS),days=[];
+  // a week has 7 slots (3 bike, 4 gym). The type you actually train can repeat (2× Pull, 2× Grundlage):
+  // it then fills the closest free slot of the same kind.
+  const take=k=>{if(!k)return null;if(pool.has(k)){pool.delete(k);return k}const z=(SUB[k]||[]).find(q=>pool.has(q));if(z){pool.delete(z);return z}return null};
   for(let d=0;d<7;d++){
     const i=w*7+d,date=iso(i),e=S.E[date]||{},acts=(byDate[date]||[]);
     const real=acts.filter(a=>a.cat!=="other");
@@ -116,7 +176,7 @@ function planWeek(w,prevLegs,byDate){
   // 1) what already happened
   days.filter(x=>x.locked).forEach(x=>{
     let absorb=null; // the session logged on the site and the Strava/Garmin recording of it count once
-    if(x.e.manual){const k=pool.has(x.e.manual)?x.e.manual:null;if(k){pool.delete(k);x.done.push({k:k,manual:true});absorb=CAT[k]}}
+    if(x.e.manual&&CAT[x.e.manual]){const sl=take(x.e.manual);if(sl){x.done.push({k:x.e.manual,slot:sl,manual:true});absorb=CAT[x.e.manual]}}
     // all rides of one day are one bike unit (e.g. two Zwift sessions): merged, times and distances added up
     const rides=x.acts.filter(a=>a.cat==="bike"),dayActs=x.acts.filter(a=>a.cat!=="bike");
     if(rides.length>1){const m=rides.slice().sort((a,b)=>b.min-a.min)[0];dayActs.push(Object.assign({},m,{name:rides.map(a=>a.name).join(" + "),min:rides.reduce((t,a)=>t+a.min,0),km:rides.reduce((t,a)=>t+a.km,0),hm:rides.reduce((t,a)=>t+a.hm,0),parts:rides}))}
@@ -125,9 +185,12 @@ function planWeek(w,prevLegs,byDate){
       if(absorb&&a.cat===absorb){absorb=null;const o=x.done.find(d=>d.manual&&!d.a);if(o)o.a=a;return}
       if(a.cat==="other"){x.extra.push(a);return}
       let k=null;const dk=x.e.pin||KEYS[x.d];
-      if(a.cat==="gym"){k=gymKey(a.name);if(!k||!pool.has(k))k=(CAT[dk]==="gym"&&pool.has(dk))?dk:["push","pull","legs","upper"].find(z=>pool.has(z))||null}
-      else{if((a.min>=150||a.km>=70)&&pool.has("long"))k="long";if(!k)k=(CAT[dk]==="bike"&&pool.has(dk))?dk:["int","base","long"].find(z=>pool.has(z))||null}
-      if(k){pool.delete(k);x.done.push({k:k,a:a})}else x.extra.push(a);
+      if(a.cat==="gym")k=gymKey(a.name)||((CAT[dk]==="gym"&&pool.has(dk))?dk:["push","pull","legs","upper"].find(z=>pool.has(z))||(CAT[dk]==="gym"?dk:"upper"));
+      else{const kd=rideKind(a);k=kd&&kd.key;
+        if(!k&&(a.min>=150||a.km>=70))k="long";
+        if(!k)k=(CAT[dk]==="bike"&&pool.has(dk))?dk:["int","base","long"].find(z=>pool.has(z))||(CAT[dk]==="bike"?dk:"base")}
+      const sl=take(k);
+      if(sl)x.done.push({k:k,slot:sl,a:a});else x.extra.push(a);
     });
     x.keys=x.done.map(o=>o.k);
     x.status=x.done.length?"done":x.e.rest?"rest":x.extra.length?"extra":"empty";
@@ -137,8 +200,8 @@ function planWeek(w,prevLegs,byDate){
   days.filter(x=>x.locked).forEach(x=>{
     const fb=S.F[x.date]||{};
     const bd=x.done.find(o=>CAT[o.k]==="bike");
-    if(bd&&bd.k==="int"&&(fb.how==="locker"||fb.how==="anders")&&pool.has("base")&&!DELOAD.has(w)&&w!==15&&!/FTP/.test(sess("base",w).title)){
-      pool.delete("base");pool.add("int");bd.k="base";x.keys=x.done.map(o=>o.k);
+    if(bd&&bd.k==="int"&&bd.slot==="int"&&!(bd.a&&rideKind(bd.a))&&(fb.how==="locker"||fb.how==="anders")&&pool.has("base")&&!DELOAD.has(w)&&w!==15&&!/FTP/.test(sess("base",w).title)){
+      pool.delete("base");pool.add("int");bd.k="base";bd.slot="base";x.keys=x.done.map(o=>o.k);
       notes.push("Intervalle am "+DOW[x.d]+" nicht gefahren: werden nachgeholt, dafür entfällt die Grundlage");
     }
     if(fb.how==="haerter"||fb.feel==="muede"||fb.feel==="platt")easy={from:x.i,why:fb.feel==="platt"?"Beine platt":fb.feel==="muede"?"Beine müde":"zuletzt härter gefahren"};
@@ -152,7 +215,7 @@ function planWeek(w,prevLegs,byDate){
     });
   });
   // 2) pins on open days
-  days.filter(x=>!x.locked&&!x.e.rest&&x.e.pin&&pool.has(x.e.pin)).forEach(x=>{pool.delete(x.e.pin);x.keys=[x.e.pin];x.pinned=true});
+  days.filter(x=>!x.locked&&!x.e.rest&&x.e.pin&&CAT[x.e.pin]).forEach(x=>{const sl=take(x.e.pin);if(sl){x.keys=[x.e.pin];x.pinned=true;x.slot=sl}});
   // 3) search the best placement for what is left
   const free=days.filter(x=>!x.locked&&!x.e.rest&&!x.pinned).map(x=>x.d);
   const rem=[...pool];
