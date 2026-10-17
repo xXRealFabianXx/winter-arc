@@ -299,7 +299,12 @@ function exChecklist(day, s) {
     ${can ? `<label class="note"><span class="label">Notiz zum Training</span><textarea rows="2" maxlength="600" placeholder="z. B. Schulter zwickt, nächstes Mal 2,5 kg mehr" data-note="${day.date}" data-k="${s.key}">${esc(log.note || "")}</textarea></label>
     <span class="label" style="letter-spacing:.06em">Antippen hakt ab, Gewicht eintragen auch. ✕ entfernt eine Übung nur aus diesem Training, dauerhaft änderst du sie unter Kraft → Übungen.</span>` : canPlan ? `<span class="label" style="letter-spacing:.06em">Abhaken und Gewichte am Trainingstag. Hinzufügen und ✕ gelten nur für dieses Training.</span>` : log.note ? `<div class="lastnote"><span class="label">Notiz</span><p>${esc(log.note)}</p></div>` : ""}</div>`;
 }
-function logSess(day, s) { const lk = S.L[day.date] && S.L[day.date].key; return lk && GYM[lk] ? sess(lk, Math.max(0, Math.floor(day.i / 7))) : s; }
+function logSess(day, s) {
+  // what you picked for the day (Ändern / ✓ Erledigt) beats an older training log of another split
+  const e = day.e || {}, chosen = [e.manual, e.pin].find((k) => k && GYM[k]);
+  if (chosen && s && s.cat === "gym") return s;
+  const lk = S.L[day.date] && S.L[day.date].key; return lk && GYM[lk] ? sess(lk, Math.max(0, Math.floor(day.i / 7))) : s;
+}
 function pseudoToday() { const d = (new Date(TODAY + "T12:00:00").getDay() + 6) % 7; return { i: TI, d, date: TODAY, extraEx: [], done: [], keys: [], e: {}, status: "free" }; }
 function changeRow(day) {
   const w = Math.floor(day.i / 7), cur = day.e.rest ? "rest" : day.keys[0], pinned = !!(day.e.pin || day.e.rest);
@@ -662,6 +667,14 @@ let DB = null;
 async function writeEntry(date, val) {
   if (!DB) return;
   if (val) S.E[date] = val; else delete S.E[date];
+  // a new strength choice for the day takes the day's training log along (entered weights stay)
+  const gk = val && [val.manual, val.pin].find((k) => k && GYM[k]), L = S.L[date];
+  if (gk && L && L.key !== gk) {
+    const has = Object.keys(L.ex || {}).length || L.note;
+    S.L[date] = has ? Object.assign({}, L, { key: gk, order: undefined, removed: [], setsN: undefined }) : { key: gk, ex: {}, note: "", extra: [], removed: [] };
+    saveLog(date);
+    if (S.C[date] && S.C[date].key !== gk) { delete S.C[date]; DB.doc("checks/" + date).delete().catch(() => {}); }
+  }
   render();
   try { const ref = DB.doc("entries/" + date); if (val) await ref.set(val); else await ref.delete(); } catch (_) {}
   toast(val ? (val.rest ? "Ruhetag eingetragen · Woche neu geplant" : val.manual ? "Als erledigt eingetragen" : "Einheit festgelegt · Woche neu geplant") : "Zurück auf automatisch");
@@ -850,7 +863,7 @@ function loadState() {
   const C = L.load("wa.checks"), CC = {}; Object.keys(C).forEach((k) => { const v = C[k]; if (v && Array.isArray(v.ex)) CC[k] = { key: v.key, ex: v.ex.slice() }; }); S.C = CC;
   recalcFtp();
 }
-const ASSET_V = "32";
+const ASSET_V = "33";
 function bootDb() { DB = makeDB(); S.dbOK = true; S.sync = "local"; loadState(); }
 async function syncRemote() {
   try {
