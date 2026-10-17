@@ -190,7 +190,7 @@
       const gr = x.createRadialGradient(256, 220, 30, 256, 256, 260); gr.addColorStop(0, "#1d1830"); gr.addColorStop(1, "#08070d");
       x.fillStyle = gr; x.fillRect(0, 0, 512, 512);
       for (let i = 0; i < 60; i++) { const a = (i / 60) * Math.PI * 2, L = i % 5 ? 14 : 30; x.strokeStyle = i % 5 ? "rgba(255,255,255,.35)" : "#ffffff"; x.lineWidth = i % 5 ? 3 : 6; x.beginPath(); x.moveTo(256 + Math.sin(a) * 236, 256 - Math.cos(a) * 236); x.lineTo(256 + Math.sin(a) * (236 - L), 256 - Math.cos(a) * (236 - L)); x.stroke(); }
-      x.textAlign = "center"; x.fillStyle = "#b9a2ff"; x.font = "600 40px 'Geist Mono', monospace"; x.fillText("FTP", 256, 190);
+      x.textAlign = "center"; x.fillStyle = "#b9a2ff"; x.font = "600 40px 'Geist', sans-serif"; x.fillText("FTP", 256, 190);
       x.fillStyle = "#ffffff"; x.font = "italic 900 150px 'Archivo', 'Arial Narrow', sans-serif"; x.fillText(ftp ? String(ftp) : "–", 256, 320);
       x.fillStyle = "#ff8a4a"; x.font = "600 34px 'Geist', sans-serif"; x.fillText(sub, 256, 380);
       tex.needsUpdate = true;
@@ -218,7 +218,7 @@
       x.fillStyle = gr; x.fillRect(0, 0, 512, 512);
       x.strokeStyle = "#f2c25b"; x.lineWidth = 10; x.beginPath(); x.arc(256, 256, 236, 0, Math.PI * 2); x.stroke();
       x.fillStyle = "#f2c25b"; x.textAlign = "center";
-      x.font = "600 44px 'Geist Mono', monospace"; x.fillText("LEVEL", 256, 170);
+      x.font = "600 44px 'Geist', sans-serif"; x.fillText("LEVEL", 256, 170);
       x.font = "italic 900 230px 'Archivo', 'Arial Narrow', sans-serif"; x.fillText(String(level), 256, 360);
       x.font = "600 34px 'Geist', sans-serif"; x.fillStyle = "#e8e2ff"; x.fillText(String(name).toUpperCase(), 256, 430);
       faceTex.needsUpdate = true;
@@ -237,10 +237,12 @@
     else { camera.position.set(0, 0.1, 5.0); camera.lookAt(0, -0.42, 0); }
   }
   window.addEventListener("resize", resize); resize();
+  const FLAT = new Set(["woche", "kraft", "tests", "erfolge"]); // flatter stage on phones (see app.css)
   const baseX = () => (wide ? 0.95 : 0);
   const SCALE = { heute: 1, woche: 1.05, rad: 1, kraft: 1, tests: 0.9, erfolge: 0.8 };
 
   function show(name) {
+    requestAnimationFrame(resize); // the stage is flatter on some tabs: re-measure after the view's CSS applies
     if (!objects[name] || name === current) return;
     prev = current; current = name; tIn = 0;
     const o = objects[name].g; o.visible = true;
@@ -271,7 +273,7 @@
       let s;
       if (k === current) s = easeBack(tIn); else if (k === prev) s = 1 - easeOut(Math.min(1, tIn * 1.6)); else { g.visible = false; continue; }
       if (k === prev && s <= 0.002) { g.visible = false; continue; }
-      g.scale.setScalar(Math.max(0.001, s) * (SCALE[k] || 1) * (wide ? 1 : 0.92));
+      g.scale.setScalar(Math.max(0.001, s) * (SCALE[k] || 1) * (wide ? 1 : FLAT.has(k) ? 0.8 : 0.92));
       g.position.x = baseX();
       if (k === "rad") { g.rotation.y = spin; g.position.y = Math.sin(t * 0.9) * 0.02; }
       else { o.idle && o.idle(t, g, dt); g.rotation.y += userRot; }

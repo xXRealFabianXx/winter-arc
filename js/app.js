@@ -47,14 +47,14 @@ function weekChart(series, opts) {
   const step = opts.step, top = Math.ceil(mx / step) * step;
   const y = (v) => T + (H - T - Bt) * (1 - v / top);
   let g = "";
-  for (let v = 0; v <= top; v += step) g += `<line x1="${L}" x2="${Wd - Rp}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" stroke-width="1" fill="none"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end" font-size="${FS}" font-family="Geist Mono, monospace" fill="var(--muted)">${opts.tick(v)}</text>`;
+  for (let v = 0; v <= top; v += step) g += `<line x1="${L}" x2="${Wd - Rp}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" stroke-width="1" fill="none"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end" font-size="${FS}" font-family="Geist, system-ui, sans-serif" fill="var(--muted)">${opts.tick(v)}</text>`;
   series.forEach((s, k) => {
     const x0 = L + k * bw, pw = bw * 0.72, px = x0 + (bw - pw) / 2, aw = bw * 0.46, ax = x0 + (bw - aw) / 2;
     if (s.plan) g += `<rect x="${px}" y="${y(s.plan)}" width="${pw}" height="${y(0) - y(s.plan)}" rx="5" fill="none" stroke="var(--muted)" stroke-dasharray="3 3" stroke-width="1"/>`;
     if (s.val > 0) g += `<rect x="${ax}" y="${y(s.val)}" width="${aw}" height="${Math.max(0, y(0) - y(s.val))}" rx="4" fill="url(#${opts.grad})"/>`;
-    g += `<text x="${x0 + bw / 2}" y="${H - 7}" text-anchor="middle" font-size="${FS}" font-family="Geist Mono, monospace" fill="${k === cw ? "var(--ink)" : "var(--muted)"}" font-weight="${k === cw ? 600 : 400}">${narrow && k % 2 && k !== cw ? "" : k + 1}</text>`;
+    g += `<text x="${x0 + bw / 2}" y="${H - 7}" text-anchor="middle" font-size="${FS}" font-family="Geist, system-ui, sans-serif" fill="${k === cw ? "var(--ink)" : "var(--muted)"}" font-weight="${k === cw ? 600 : 400}">${narrow && k % 2 && k !== cw ? "" : k + 1}</text>`;
   });
-  const defs = `<defs><linearGradient id="gRad" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="var(--rad)"/><stop offset="1" stop-color="var(--rad2)"/></linearGradient><linearGradient id="gKraft" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="var(--kraft)"/><stop offset="1" stop-color="var(--kraft2)"/></linearGradient><linearGradient id="gAll" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="var(--violet)"/><stop offset="1" stop-color="var(--done)"/></linearGradient></defs>`;
+  const defs = `<defs><linearGradient id="gRad" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="var(--rad)"/><stop offset="1" stop-color="var(--rad2)"/></linearGradient><linearGradient id="gKraft" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="var(--kraft)"/><stop offset="1" stop-color="var(--kraft2)"/></linearGradient><linearGradient id="gAll" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="var(--done)"/><stop offset="1" stop-color="var(--done2)"/></linearGradient></defs>`;
   return `<div class="chart"><svg viewBox="0 0 ${Wd} ${H}" role="img" aria-label="${esc(opts.aria)}">${defs}${g}</svg></div>`;
 }
 /* ---------- Garmin wellness via intervals.icu ---------- */
@@ -113,7 +113,7 @@ function garminTrendCard() {
   if (!GW.days.length) return "";
   const pick = (f) => GW.days.filter((d) => typeof d[f] === "number").map((d) => ({ date: d.date, v: d[f] }));
   const vo2 = pick("vo2"), ctl = pick("ctl"), rhr = pick("rhr");
-  const vo2C = vo2.length >= 2 ? `<div><span class="label">VO2max</span>${lineChart("vo2", vo2, "VO2max", 0, "var(--violet)")}</div>` : "";
+  const vo2C = vo2.length >= 2 ? `<div><span class="label">VO2max</span>${lineChart("vo2", vo2, "VO2max", 0, "var(--done)")}</div>` : "";
   const ctlC = ctl.length >= 2 ? `<div><span class="label">Fitness (CTL)</span>${lineChart("ctl", ctl, "Fitness", 0, "var(--rad)")}</div>` : "";
   const rhrC = !vo2C && rhr.length >= 2 ? `<div><span class="label">Ruhepuls</span>${lineChart("rhr", rhr, "bpm", 0, "var(--kraft)")}</div>` : "";
   if (!vo2C && !ctlC && !rhrC) return "";
@@ -122,9 +122,9 @@ function garminTrendCard() {
 function garminSetupCard() {
   const st = GW.st || { mode: "wait" };
   let main;
-  if (st.mode === "on") { const l = GW.days.length ? GW.days[GW.days.length - 1].date : null; main = `<div class="row"><span class="sp-dot on"></span><div style="flex:1"><b>Garmin verbunden</b><div class="label" style="letter-spacing:.04em;text-transform:none">Über intervals.icu${l ? " · Daten bis " + dm(l) : ""}${st.stale ? " · letzte Abfrage fehlgeschlagen" : ""}</div></div></div>`; }
-  else if (st.mode === "setup") main = `<div class="row"><span class="sp-dot"></span><div style="flex:1"><b>Garmin noch nicht verbunden</b><div class="label" style="letter-spacing:.04em;text-transform:none">Kostenloses Konto bei intervals.icu, dort Garmin verbinden, dann den API-Key in Vercel eintragen.</div></div></div>`;
-  else if (st.mode === "error") main = `<div class="row"><span class="sp-dot"></span><div style="flex:1"><b>Garmin-Daten nicht erreichbar</b><div class="label" style="letter-spacing:.04em;text-transform:none">${st.error === "key" ? "Der intervals.icu API-Key wird abgelehnt." : st.error === "athlete" ? "Die Athleten-ID passt nicht." : "intervals.icu antwortet gerade nicht."}</div></div><button class="btn sm" type="button" data-gcheck="1">Neu prüfen</button></div>`;
+  if (st.mode === "on") { const l = GW.days.length ? GW.days[GW.days.length - 1].date : null; main = `<div class="row"><span class="sp-dot on"></span><div style="flex:1"><b>Garmin verbunden</b><div class="label" style="text-transform:none">Über intervals.icu${l ? " · Daten bis " + dm(l) : ""}${st.stale ? " · letzte Abfrage fehlgeschlagen" : ""}</div></div></div>`; }
+  else if (st.mode === "setup") main = `<div class="row"><span class="sp-dot"></span><div style="flex:1"><b>Garmin noch nicht verbunden</b><div class="label" style="text-transform:none">Kostenloses Konto bei intervals.icu, dort Garmin verbinden, dann den API-Key in Vercel eintragen.</div></div></div>`;
+  else if (st.mode === "error") main = `<div class="row"><span class="sp-dot"></span><div style="flex:1"><b>Garmin-Daten nicht erreichbar</b><div class="label" style="text-transform:none">${st.error === "key" ? "Der intervals.icu API-Key wird abgelehnt." : st.error === "athlete" ? "Die Athleten-ID passt nicht." : "intervals.icu antwortet gerade nicht."}</div></div><button class="btn sm" type="button" data-gcheck="1">Neu prüfen</button></div>`;
   else if (st.mode === "login") main = `<div class="label">Erst mit Strava anmelden.</div>`;
   else main = `<div class="label">Wird geprüft…</div>`;
   return `<section class="card span-12"><div class="card-h"><h3>Garmin</h3><span class="label">VO2max · HRV · Schlaf</span></div>${main}</section>`;
@@ -165,7 +165,7 @@ function routeSvg(poly, mini, actId) {
   let el = 0; if (actId) { if (!ROUTE_SEEN.has(actId)) ROUTE_SEEN.set(actId, performance.now()); el = performance.now() - ROUTE_SEEN.get(actId); }
   const done = el > 1500;
   return `<svg class="route${done ? " static" : ""}"${el && !done ? ` style="--rd:${-Math.round(el)}ms"` : ""} viewBox="0 0 ${W} ${H}" role="img" aria-label="Streckenverlauf"><defs>
-    <linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${a[0]}" y1="${a[1]}" x2="${(loop ? P[Math.floor(P.length / 2)][0] : z[0]) + 0.01}" y2="${loop ? P[Math.floor(P.length / 2)][1] : z[1]}"><stop offset="0" stop-color="var(--rad2)"/><stop offset=".55" stop-color="var(--rad)"/><stop offset="1" stop-color="var(--violet)"/></linearGradient>
+    <linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${a[0]}" y1="${a[1]}" x2="${(loop ? P[Math.floor(P.length / 2)][0] : z[0]) + 0.01}" y2="${loop ? P[Math.floor(P.length / 2)][1] : z[1]}"><stop offset="0" stop-color="var(--rad2)"/><stop offset="1" stop-color="var(--rad)"/></linearGradient>
     <filter id="${id}b" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="5"/></filter></defs>
     <g class="route-grid">${grid}</g>
     <path class="route-glow" d="${d}" stroke="url(#${id})" filter="url(#${id}b)"/>
@@ -205,22 +205,23 @@ function vHeute() {
   if (day && TI < 0) { heroTitle = "Kraft"; heroCls = "grad-kraft"; const s0 = sessOf(day); heroSub = "Plan startet morgen mit " + (s0 ? s0.title : "dem ersten Training") + "."; }
   if (day && TI >= 0) {
     const k = day.keys[0], w = Math.floor(day.i / 7), s = sessOf(day), isToday = day.i === TI, canWrite = S.dbOK;
-    if (day.status === "done") { heroTitle = "Erledigt"; heroCls = "grad-done"; heroSub = s ? s.title + " ist im Kasten." : "Stark."; }
-    else if (day.status === "rest") { heroTitle = "Ruhetag"; heroCls = ""; heroSub = "Erholung gehört zum Plan. Die Woche ist neu verteilt."; }
+    // the hero carries today's session in big type; the card below holds details and actions
+    if (day.status === "rest") { heroTitle = "Ruhetag"; heroCls = ""; heroSub = "Erholung gehört zum Plan. Die Woche ist neu verteilt."; }
     else if (!s) { heroTitle = "Frei"; heroCls = ""; heroSub = "Heute steht nichts an."; }
-    else { heroTitle = s.cat === "bike" ? "Rad" : "Kraft"; heroCls = s.cat === "bike" ? "grad-rad" : "grad-kraft"; heroSub = s.title + " · " + s.min + " Minuten"; }
+    else {
+      heroTitle = s.title; heroCls = s.cat === "bike" ? "grad-rad" : "grad-kraft";
+      heroSub = day.status === "done" ? "Erledigt · " + catName(s.cat) + " · " + s.min + " Minuten" : catName(s.cat) + " · " + s.min + " Minuten" + (s.cat === "bike" && S.ftp && !s.detected ? " · Z2 " + fillW("{Z2}") : "");
+    }
     let body = "";
     if (s) {
-      body += `<span class="label">${s.detected ? "Gefahren · erkannt aus Strava" : isToday ? "Geplantes Training" : "Erstes Training"}</span><div class="card-h"><span class="chip ${catCls(s.cat)}"><i></i>${catName(s.cat)} · ${s.min}′</span>${day.status === "done" ? `<span class="chip done">Erledigt</span>` : day.pinned ? `<span class="chip pin">Festgelegt</span>` : ""}</div>
-        <div class="t-title ${s.cat === "bike" ? "grad-rad" : "grad-kraft"}">${esc(s.title)}</div>
+      body += `<span class="label">${s.detected ? "Gefahren · erkannt aus Strava" : isToday ? "Geplantes Training" : "Erstes Training"}</span>${day.status === "done" ? `<div class="card-h"><span class="chip done">Erledigt</span></div>` : day.pinned ? `<div class="card-h"><span class="chip pin">Festgelegt</span></div>` : ""}
         <div class="t-detail">${esc(s.cat === "bike" ? fillW(s.detail) : s.test ? s.detail : s.detail + " · " + RIR(w))}</div>`;
-      if (s.cat === "bike" && !s.detected) body += `<div class="specs">${S.ftp ? `<span class="spec"><span>Z2</span>${fillW("{Z2}")}</span><span class="spec"><span>FTP</span>${S.ftp} W</span>` : `<span class="spec"><span>Zonen</span>in % FTP</span>`}<span class="spec"><span>Dauer</span>${s.min}′</span></div>`;
       if (s.ex) body += exChecklist(day, logSess(day, s));
       const ride = day.acts.filter((x) => x.cat === "bike").sort((x, y) => y.km - x.km)[0];
       if (ride) body += rideBlock(ride, s.detected);
       if (day.status === "done" || (isToday && day.done.length)) body += feedbackBlock(day, s);
     } else {
-      body += `<div class="t-title">${day.status === "rest" ? "Ruhetag" : "Frei"}</div><div class="t-detail">${day.status === "rest" ? "Eingetragen. Die übrigen Einheiten rücken nach." : "Keine Einheit geplant. Leg eine fest, wenn du Lust hast."}</div>`;
+      body += `<div class="t-detail">${day.status === "rest" ? "Eingetragen. Die übrigen Einheiten rücken nach." : "Keine Einheit geplant. Leg eine fest, wenn du Lust hast."}</div>`;
     }
     let a = "";
     if (isToday && k && !s.detected) { const ls = s.cat === "gym" ? logSess(day, s) : s; a += `<button class="btn ${s.cat === "bike" ? "rad" : "kraft"} start" type="button" data-start="${ls.key}" data-date="${day.date}">${Focus.isLive(day.date) ? "▶ Training fortsetzen" : "▶ Training starten"}</button>`; }
@@ -234,21 +235,17 @@ function vHeute() {
     card = `<section class="card today span-8 ${s ? "accent-" + catCls(s.cat) : ""}" data-date="${day.date}">${body}<div class="btns" data-actions data-date="${day.date}">${a}</div></section>`;
   }
   const quota = R.doneAll + R.lost ? Math.round((R.doneAll / (R.doneAll + R.lost)) * 100) : null;
-  const rings = `<section class="card span-4"><div class="card-h"><h3>Diese Woche</h3><span class="label">Etappe ${cw + 1}</span></div>
-     <div class="goals" style="grid-template-columns:1fr;gap:14px">
-       ${goal("Rad", W.bikeN, 3, "Einheiten", "rad", (n) => n)}
-       ${goal("Kraft", W.gymN, 4, "Einheiten", "kraft", (n) => n)}
-       ${goal("Gesamt", W.doneN, 7, "Einheiten", "", (n) => n)}
-     </div></section>`;
   const next = upcoming(null, 3);
-  const nextCard = `<section class="card span-6"><div class="card-h"><h3>Als Nächstes</h3><button class="btn sm" type="button" data-go="woche">Ganze Woche</button></div><div class="rows">${next.length ? next.map((x) => dayRow(x)).join("") : `<p class="empty">Nichts mehr geplant.</p>`}</div></section>`;
+  const nextCard = `<section class="card span-12"><div class="card-h"><h3>Als Nächstes</h3><button class="btn sm" type="button" data-go="woche">Ganze Woche</button></div><div class="rows">${next.length ? next.map((x) => dayRow(x)).join("") : `<p class="empty">Nichts mehr geplant.</p>`}</div></section>`;
   const ch = W.ch, chP = Math.min(ch.cur / ch.target, 1);
   const chTxt = !W.started ? "Startet " + dm(iso(cw * 7)) : !S.live ? "Wartet auf Strava" : ch.won ? "Geschafft" : ch.target === 1 ? "Offen" : (ch.unit === " h" ? fN(ch.cur, 1) : fN(ch.cur)) + " / " + fN(ch.target) + ch.unit;
-  const chCard = `<section class="card span-6"><div class="card-h"><h3>Wochen-Challenge</h3><span class="chip pin">+150 XP</span></div><div style="font-size:1.25rem;font-weight:600;letter-spacing:-.01em">${esc(CH[cw].t)}</div><div class="track gold"><i style="width:${S.live && W.started ? Math.round(chP * 100) : 0}%"></i></div><span class="label num">${esc(chTxt)}</span></section>`;
-  const adj = adjustCard(W);
+  const strip = (lab, n, t, cls) => `<div><span class="label">${lab}</span><b class="num">${n}<small>/${t}</small></b><div class="track ${cls}"><i style="width:${Math.min(100, Math.round((n / t) * 100))}%"></i></div></div>`;
+  const weekCard = `<section class="card span-4"><div class="card-h"><h3>Diese Woche</h3><button class="btn sm" type="button" data-go="woche">Etappe ${cw + 1}</button></div>
+    <div class="wstrip">${strip("Rad", W.bikeN, 3, "rad")}${strip("Kraft", W.gymN, 4, "kraft")}${strip("Gesamt", W.doneN, 7, "")}</div>
+    <div class="wch"><b>${esc(CH[cw].t)}</b><span class="num">${esc(chTxt)}</span></div></section>`;
   return {
-    hero: `<span class="label">${esc(eyebrow)}</span><h1 class="xl"><span class="${heroCls}">${esc(heroTitle)}</span></h1><p class="sub">${esc(heroSub)}</p>`,
-    body: extraLog + card + rings + recoveryCard() + adj + nextCard + chCard + `<section class="card span-12"><div class="kpis">${kpi("Level", levelOf(R.xp) + 1, "", esc(LEVELS[levelOf(R.xp)][1]))}${kpi("XP", fN(R.xp))}${kpi("Serie", R.wStreak, " Wo", R.dStreak + " Tage im Plan")}${kpi("Plan-Quote", quota === null ? "–" : quota, quota === null ? "" : " %")}</div></section>`,
+    hero: `<span class="label">${esc(eyebrow)}</span><h1 class="xl${heroTitle.length > 20 ? " xlong" : heroTitle.length > 11 ? " long" : ""}"><span class="${heroCls}">${esc(heroTitle)}</span></h1><p class="sub">${esc(heroSub)}</p>`,
+    body: extraLog + card + weekCard + recoveryCard() + nextCard,
   };
 }
 /* last logged values for an exercise and last note of the same session type, before a date */
@@ -324,7 +321,7 @@ function exChecklist(day, s) {
     ${can && !s.test ? trackPanel(day.date, s.key, list.map((e) => e.n)) : ""}
     ${can && (Object.keys(log.ex || {}).length || on.size || (S.E[day.date] && S.E[day.date].manual)) && !Focus.isLive(day.date) ? `<button type="button" class="btn ghost-danger sm" data-clearday="${day.date}" data-label="Einträge dieses Trainings löschen">Einträge dieses Trainings löschen</button>` : ""}
     ${can ? `<label class="note"><span class="label">Notiz zum Training</span><textarea rows="2" maxlength="600" placeholder="z. B. Schulter zwickt, nächstes Mal 2,5 kg mehr" data-note="${day.date}" data-k="${s.key}">${esc(log.note || "")}</textarea></label>
-    <span class="label" style="letter-spacing:.06em">Antippen hakt ab, Gewicht eintragen auch. ✕ entfernt eine Übung nur aus diesem Training, dauerhaft änderst du sie unter Kraft → Übungen.</span>` : canPlan ? `<span class="label" style="letter-spacing:.06em">Abhaken und Gewichte am Trainingstag. Hinzufügen und ✕ gelten nur für dieses Training.</span>` : log.note ? `<div class="lastnote"><span class="label">Notiz</span><p>${esc(log.note)}</p></div>` : ""}</div>`;
+    <span class="label">Antippen hakt ab, Gewicht eintragen auch. ✕ entfernt eine Übung nur aus diesem Training, dauerhaft änderst du sie unter Kraft → Übungen.</span>` : canPlan ? `<span class="label">Abhaken und Gewichte am Trainingstag. Hinzufügen und ✕ gelten nur für dieses Training.</span>` : log.note ? `<div class="lastnote"><span class="label">Notiz</span><p>${esc(log.note)}</p></div>` : ""}</div>`;
 }
 function logSess(day, s) {
   // what you picked for the day (Ändern / ✓ Erledigt) beats an older training log of another split
@@ -340,7 +337,7 @@ function changeRow(day) {
     <div class="fb-row">${["push", "pull", "legs", "upper"].map((k) => opt(k, GYM[k].n, "kraft")).join("")}</div>
     <div class="fb-row">${["int", "base", "long"].map((k) => opt(k, sess(k, w).title, "rad")).join("")}</div>
     <div class="fb-row">${opt("rest", "Ruhetag")}${pinned ? `<button type="button" class="opt sm" data-change="auto" data-date="${day.date}"><b>Zurück zum Plan</b></button>` : ""}</div>
-    <span class="label" style="letter-spacing:.06em">Der Rest der Woche wird automatisch neu verteilt. Nach Beinen plant er kein Rad.</span></details>`;
+    <span class="label">Der Rest der Woche wird automatisch neu verteilt. Nach Beinen plant er kein Rad.</span></details>`;
 }
 function splitPicker(date, cur, q) {
   return `<div class="fb"><span class="fb-q">${q}</span><div class="fb-row">${["push", "pull", "legs", "upper"].map((k) => `<button type="button" class="opt sm${cur === k ? " on" : ""}" data-logkey="${k}" data-date="${date}"><b>${GYM[k].n}</b></button>`).join("")}</div></div>`;
@@ -377,7 +374,7 @@ function vWoche() {
     <p class="empty" style="font-size:.82rem">Tag antippen für Ruhetag, Einheit festlegen oder ohne Strava abhaken. Die Woche plant sich selbst neu, nach Beinen kommt nie Rad.</p></section>`;
   const sum = `<section class="card span-5"><div class="card-h"><h3>Fortschritt</h3><span class="label num">${W.doneN} / 7</span></div><div class="track"><i style="width:${Math.round((W.doneN / 7) * 100)}%"></i></div>
     <div class="kpis" style="grid-template-columns:repeat(2,minmax(0,1fr))">${kpi("Rad", W.bikeN, "/3")}${kpi("Kraft", W.gymN, "/4")}${kpi("Rad-km", fN(W.km))}${kpi("Höhenmeter", fN(W.hm))}</div></section>`;
-  const chart = `<section class="card span-12"><div class="card-h"><h3>Einheiten pro Etappe</h3><div class="legend label"><span><i style="background:var(--violet)"></i>Erledigt</span><span><i style="border:1.5px dashed var(--muted)"></i>Plan 7</span></div></div>${weekChart(R.weeks.map((x) => ({ val: x.doneN, plan: 7 })), { step: 1, min: 7, tick: (v) => (v % 2 ? "" : v), grad: "gAll", aria: "Erledigte Einheiten je Etappe" })}</section>`;
+  const chart = `<section class="card span-12"><div class="card-h"><h3>Einheiten pro Etappe</h3><div class="legend label"><span><i style="background:var(--done)"></i>Erledigt</span><span><i style="border:1.5px dashed var(--muted)"></i>Plan 7</span></div></div>${weekChart(R.weeks.map((x) => ({ val: x.doneN, plan: 7 })), { step: 1, min: 7, tick: (v) => (v % 2 ? "" : v), grad: "gAll", aria: "Erledigte Einheiten je Etappe" })}</section>`;
   return {
     hero: `<span class="label">Etappe ${w + 1} · ${esc(PHASE[w])}</span><h1 class="xl">Woche</h1><p class="sub">${W.doneN} von 7 Einheiten · Rad ${W.bikeN}/3 · Kraft ${W.gymN}/4</p>`,
     body: `<div class="span-12">${season}</div>` + adjustCard(W) + list + sum + chart,
@@ -502,11 +499,11 @@ function vTests() {
   const pts = [{ l: "Start", v: base }].concat(TESTS.map((t) => ({ l: "T" + t.n, v: (fts.find((x) => x.n === t.n) || {}).ftp || null })));
   const vals = pts.map((p) => p.v).filter(Boolean), lo = Math.floor((Math.min(...vals, base || 200) - 10) / 10) * 10, hi = Math.ceil((Math.max(...vals, (ftpGoal() || 220)) + 10) / 10) * 10;
   const cw2 = 360, ch2 = 170, px = (i) => 30 + i * ((cw2 - 50) / 4), py = (v) => 14 + (ch2 - 40) * (1 - (v - lo) / (hi - lo));
-  let svg = `<line x1="30" x2="${cw2 - 12}" y1="${py(ftpGoal() || 220)}" y2="${py(ftpGoal() || 220)}" stroke="var(--rad2)" stroke-dasharray="4 4" stroke-width="1" fill="none"/><text x="${cw2 - 12}" y="${py(ftpGoal() || 220) - 6}" text-anchor="end" font-size="9.5" font-family="Geist Mono, monospace" fill="var(--rad2)">Ziel ${ftpGoal() || 220} W</text>`;
+  let svg = `<line x1="30" x2="${cw2 - 12}" y1="${py(ftpGoal() || 220)}" y2="${py(ftpGoal() || 220)}" stroke="var(--rad2)" stroke-dasharray="4 4" stroke-width="1" fill="none"/><text x="${cw2 - 12}" y="${py(ftpGoal() || 220) - 6}" text-anchor="end" font-size="9.5" font-family="Geist, system-ui, sans-serif" fill="var(--rad2)">Ziel ${ftpGoal() || 220} W</text>`;
   const known = pts.map((p, i) => ({ ...p, i })).filter((p) => p.v);
   if (known.length > 1) svg += `<polyline points="${known.map((p) => px(p.i) + "," + py(p.v)).join(" ")}" fill="none" stroke="url(#gV)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>`;
-  pts.forEach((p, i) => { svg += `<text x="${px(i)}" y="${ch2 - 6}" text-anchor="middle" font-size="10" font-family="Geist Mono, monospace" fill="var(--muted)">${p.l}</text>`; if (p.v) svg += `<circle cx="${px(i)}" cy="${py(p.v)}" r="6" fill="var(--bg)" stroke="var(--violet)" stroke-width="3"/><text x="${px(i)}" y="${py(p.v) - 12}" text-anchor="middle" font-size="11" font-weight="600" font-family="Geist, sans-serif" fill="var(--ink)">${p.v}</text>`; });
-  const ftpChart = `<div class="chart"><svg viewBox="0 0 ${cw2} ${ch2}" role="img" aria-label="FTP-Verlauf über die Tests"><defs><linearGradient id="gV" x1="0" x2="1"><stop offset="0" stop-color="var(--violet)"/><stop offset="1" stop-color="var(--rad)"/></linearGradient></defs>${svg}</svg></div>`;
+  pts.forEach((p, i) => { svg += `<text x="${px(i)}" y="${ch2 - 6}" text-anchor="middle" font-size="10" font-family="Geist, system-ui, sans-serif" fill="var(--muted)">${p.l}</text>`; if (p.v) svg += `<circle cx="${px(i)}" cy="${py(p.v)}" r="6" fill="var(--bg)" stroke="var(--rad)" stroke-width="3"/><text x="${px(i)}" y="${py(p.v) - 12}" text-anchor="middle" font-size="11" font-weight="600" font-family="Geist, sans-serif" fill="var(--ink)">${p.v}</text>`; });
+  const ftpChart = `<div class="chart"><svg viewBox="0 0 ${cw2} ${ch2}" role="img" aria-label="FTP-Verlauf über die Tests"><defs><linearGradient id="gV" x1="0" x2="1"><stop offset="0" stop-color="var(--rad2)"/><stop offset="1" stop-color="var(--rad)"/></linearGradient></defs>${svg}</svg></div>`;
   // selected round inputs
   const t = TESTS.find((x) => x.n === testRound), st = roundState(t), open = st !== "next" && S.dbOK;
   const p20 = (S.T.ftp || {})[t.n] || "";
@@ -514,7 +511,7 @@ function vTests() {
     ${ftpChart}
     <form class="tform" data-tform="ftp" data-n="${t.n}"><label for="p20-${t.n}" class="label">20′-Durchschnitt in Watt</label>
       <div class="tin"><input id="p20-${t.n}" name="v" type="number" inputmode="numeric" min="50" max="600" step="1" value="${p20}" placeholder="z. B. 220" ${open ? "" : "disabled"}><span class="tout">FTP <b class="num">${p20 ? ftpFrom20(+p20) + " W" : "–"}</b></span><button class="btn sm rad" type="submit" ${open ? "" : "disabled"}>Speichern</button></div></form>
-    <span class="label" style="letter-spacing:.06em">${open ? "FTP = 95 % des 20′-Schnitts. Trag den neuen Wert danach auch in Strava ein." : "Eintragen ab " + dm(iso(t.w * 7)) + "."}</span></section>`;
+    <span class="label">${open ? "FTP = 95 % des 20′-Schnitts. Trag den neuen Wert danach auch in Strava ein." : "Eintragen ab " + dm(iso(t.w * 7)) + "."}</span></section>`;
   const K = (S.T.kraft || {})[t.n] || {}, prevN = t.n > 1 ? t.n - 1 : null, P = prevN ? (S.T.kraft || {})[prevN] || {} : {};
   const groups = ["push", "pull", "legs"].map((k) => `<div class="tgroup"><span class="label">${GYM[k].n}</span>${baseList(k).map((e) => {
     const v = K[e.n] || "", pv = P[e.n], d = v && pv ? ((v - pv) / pv) * 100 : null;
@@ -522,10 +519,10 @@ function vTests() {
   }).join("")}</div>`).join("");
   const kraftCard = `<section class="card accent-kraft span-6"><div class="card-h"><h3>Krafttest · Test ${t.n}</h3><span class="label">6 Wiederholungen</span></div>
     <p class="empty" style="color:var(--ink2)">Pro Übung aufwärmen und das Gewicht eintragen, mit dem du genau 6 saubere Wiederholungen schaffst. Die Prozentzahl zeigt die Veränderung zum vorherigen Test.</p>${groups}
-    <span class="label" style="letter-spacing:.06em">${open ? "Wird beim Verlassen des Feldes gespeichert." : "Eintragen ab " + dm(iso(t.w * 7)) + "."}</span></section>`;
+    <span class="label">${open ? "Wird beim Verlassen des Feldes gespeichert." : "Eintragen ab " + dm(iso(t.w * 7)) + "."}</span></section>`;
   return {
-    hero: `<span class="label">${roundState(cur) === "now" ? "Testwoche · jetzt" : "Nächster Test in " + daysTo + " Tagen · Etappe " + (cur.w + 1)}</span><h1 class="xl"><span class="grad-violet">Tests</span></h1><p class="sub">FTP-Test über 20 Minuten auf Zwift und Krafttest mit 6 Wiederholungen, alle 4 Wochen.</p>`,
-    body: `<div class="span-12 kpis">${kpi("FTP", latest || base || "–", latest || base ? " W" : "", latest ? "aus Test " + fts[fts.length - 1].n : "Startwert aus Strava")}${kpi("Seit Start", delta === null ? "–" : (delta >= 0 ? "+" : "") + delta, delta === null ? "" : " W", base ? "Start " + base + " W" : "")}${kpi("W/kg", wkg ? fN(wkg, 2) : "–")}${kpi("Kraft", gain ? (gain >= 0 ? "+" : "") + fN(gain * 100, 1) : "–", gain ? " %" : "", "Ø Steigerung im 6-Wdh.-Test")}</div>` +
+    hero: `<span class="label">${roundState(cur) === "now" ? "Testwoche · jetzt" : "Nächster Test in " + daysTo + " Tagen · Etappe " + (cur.w + 1)}</span><h1 class="xl"><span class="grad-violet">Tests</span></h1><p class="sub">20′-FTP auf Zwift und 6-Wdh.-Krafttest, alle 4 Wochen.</p>`,
+    body: `<div class="span-12 kpis">${kpi("FTP", latest || base || "–", latest || base ? " W" : "", latest ? "aus Test " + fts[fts.length - 1].n : "Startwert aus Strava")}${kpi("Seit Start", delta === null ? "Offen" : (delta >= 0 ? "+" : "") + delta, delta === null ? "" : " W", delta === null ? "Nach Test 1 ab " + dm(iso(TESTS[0].w * 7)) : base ? "Start " + base + " W" : "")}${kpi("W/kg", wkg ? fN(wkg, 2) : "Offen", "", wkg ? "" : "Gewicht in Strava eintragen")}${kpi("Kraft", gain ? (gain >= 0 ? "+" : "") + fN(gain * 100, 1) : "Offen", gain ? " %" : "", gain ? "Ø Steigerung im 6-Wdh.-Test" : "Vergleich ab Test 2")}</div>` +
       timeline + ftpCard + kraftCard + garminTrendCard(),
   };
 }
@@ -820,8 +817,8 @@ function spotifyCard() {
   const mode = st ? st.mode : "wait";
   const head = '<div class="card-h"><h3>Musik im Training</h3><span class="label">Spotify</span></div>';
   let main;
-  if (mode === "on") main = `<div class="row"><span class="sp-dot on"></span><div style="flex:1"><b>Spotify verbunden</b><div class="label" style="letter-spacing:.04em">${st.track ? esc(st.track.name) + " · " + esc(st.track.artist) : "Im Training steuerst du Musik direkt unten in der Leiste."}${st.device ? " · " + esc(st.device.name) : ""}</div></div><a class="btn sm" href="/api/spotify/logout">Trennen</a></div>`;
-  else if (mode === "login") main = `<div class="row"><span class="sp-dot"></span><div style="flex:1"><b>Spotify verbinden</b><div class="label" style="letter-spacing:.04em">Dann siehst du im Training, was läuft, und steuerst Play, Skip und Playlists. Braucht Spotify Premium.</div></div><a class="btn sm sp" href="/api/spotify/login">Verbinden</a></div>`;
+  if (mode === "on") main = `<div class="row"><span class="sp-dot on"></span><div style="flex:1"><b>Spotify verbunden</b><div class="label">${st.track ? esc(st.track.name) + " · " + esc(st.track.artist) : "Im Training steuerst du Musik direkt unten in der Leiste."}${st.device ? " · " + esc(st.device.name) : ""}</div></div><a class="btn sm" href="/api/spotify/logout">Trennen</a></div>`;
+  else if (mode === "login") main = `<div class="row"><span class="sp-dot"></span><div style="flex:1"><b>Spotify verbinden</b><div class="label">Dann siehst du im Training, was läuft, und steuerst Play, Skip und Playlists. Braucht Spotify Premium.</div></div><a class="btn sm sp" href="/api/spotify/login">Verbinden</a></div>`;
   else if (mode === "off") {
     let why;
     if (st.error === "not_configured") {
@@ -830,10 +827,10 @@ function spotifyCard() {
       if (odd.length) why += " Gefunden, aber falsch geschrieben: <b>" + odd.map(esc).join(", ") + "</b>.";
       else if (!(st.seen || []).length) why += " Meist fehlt der Redeploy, oder die Variablen gelten nicht für <b>Production</b>.";
     } else why = st.status ? "Spotify-Server antwortet mit Fehler " + esc(String(st.status)) + "." : "Spotify-Server nicht erreichbar.";
-    main = `<div class="row"><span class="sp-dot"></span><div style="flex:1"><b>Spotify noch nicht eingerichtet</b><div class="label" style="letter-spacing:.04em;text-transform:none">${why}</div></div><button class="btn sm" type="button" data-spcheck="1">Neu prüfen</button></div>`;
+    main = `<div class="row"><span class="sp-dot"></span><div style="flex:1"><b>Spotify noch nicht eingerichtet</b><div class="label" style="text-transform:none">${why}</div></div><button class="btn sm" type="button" data-spcheck="1">Neu prüfen</button></div>`;
   }
   else main = `<div class="label">Spotify wird geprüft…</div>`;
-  return `<section class="card span-12">${head}${main}<details class="sp-alt"${mode === "on" ? "" : " open"}><summary class="label">Alternative: Playlist-Link</summary><form class="exadd" data-music="1"><input type="text" name="u" value="${esc(musicUrl())}" placeholder="Spotify-Link deiner Playlist einfügen" aria-label="Spotify-Link"><button class="btn sm rad" type="submit">Speichern</button></form><span class="label" style="letter-spacing:.06em">In Spotify bei der Playlist auf Teilen → Link kopieren.</span></details></section>`;
+  return `<section class="card span-12">${head}${main}<details class="sp-alt"${mode === "on" ? "" : " open"}><summary class="label">Alternative: Playlist-Link</summary><form class="exadd" data-music="1"><input type="text" name="u" value="${esc(musicUrl())}" placeholder="Spotify-Link deiner Playlist einfügen" aria-label="Spotify-Link"><button class="btn sm rad" type="submit">Speichern</button></form><span class="label">In Spotify bei der Playlist auf Teilen → Link kopieren.</span></details></section>`;
 }
 
 function spotifyEmbed(url) {
@@ -891,7 +888,7 @@ function loadState() {
   const C = L.load("wa.checks"), CC = {}; Object.keys(C).forEach((k) => { const v = C[k]; if (v && Array.isArray(v.ex)) CC[k] = { key: v.key, ex: v.ex.slice() }; }); S.C = CC;
   recalcFtp();
 }
-const ASSET_V = "35";
+const ASSET_V = "37";
 function bootDb() { DB = makeDB(); S.dbOK = true; S.sync = "local"; loadState(); }
 async function syncRemote() {
   try {

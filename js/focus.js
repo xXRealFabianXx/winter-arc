@@ -84,9 +84,9 @@ const Focus = (function () {
     const key = (emb || "") + (login ? "|login" : "");
     if (m.dataset.url === key && m.childElementCount) return; // keep the player (and the music) running
     m.dataset.url = key;
-    const conn = login ? `<a class="btn sm sp" href="/api/spotify/login">Mit Spotify verbinden</a><span class="label" style="letter-spacing:.06em">Dann steuerst du hier, was auf deinem Handy läuft. Dein Training bleibt gespeichert.</span>` : "";
+    const conn = login ? `<a class="btn sm sp" href="/api/spotify/login">Mit Spotify verbinden</a><span class="label">Dann steuerst du hier, was auf deinem Handy läuft. Dein Training bleibt gespeichert.</span>` : "";
     if (emb) m.innerHTML = `<button type="button" class="f-mtoggle" data-fm="toggle"><span>♫</span><b>Musik</b><span class="label">Spotify</span></button><div class="f-mplayer" hidden>${conn}<iframe src="${emb}" title="Spotify-Player" width="100%" height="152" frameborder="0" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe></div>`;
-    else m.innerHTML = `<button type="button" class="f-mtoggle" data-fm="toggle"><span>♫</span><b>${login ? "Spotify verbinden" : "Playlist verbinden"}</b><span class="label">Spotify</span></button><div class="f-mplayer" hidden>${conn}<form class="exadd" data-fmusic="1"><input type="text" name="u" placeholder="Spotify-Link der Playlist" aria-label="Spotify-Link"><button class="btn sm rad" type="submit">Speichern</button></form><span class="label" style="letter-spacing:.06em">${login ? "Oder nur" : "In Spotify:"} Playlist → Teilen → Link kopieren.</span></div>`;
+    else m.innerHTML = `<button type="button" class="f-mtoggle" data-fm="toggle"><span>♫</span><b>${login ? "Spotify verbinden" : "Playlist verbinden"}</b><span class="label">Spotify</span></button><div class="f-mplayer" hidden>${conn}<form class="exadd" data-fmusic="1"><input type="text" name="u" placeholder="Spotify-Link der Playlist" aria-label="Spotify-Link"><button class="btn sm rad" type="submit">Speichern</button></form><span class="label">${login ? "Oder nur" : "In Spotify:"} Playlist → Teilen → Link kopieren.</span></div>`;
   }
   async function spRefresh() { if (!F) return; await spState(); if (F) musicBar(); }
   async function spAction(a) {
@@ -234,7 +234,7 @@ const Focus = (function () {
       <div class="f-exlist" data-sort="sess|${F.date}|${F.key}">${cards || `<p class="empty">Keine Übungen. Füg unten welche hinzu.</p>`}</div>
       <button type="button" class="btn f-addwide" data-f="addopen">+ Übung hinzufügen</button>
       ${s.test ? "" : trackPanel(F.date, F.key, items.map((x) => x.n))}
-      <span class="label" style="letter-spacing:.06em">Kreis antippen hakt den Satz ab. Gewicht und Wiederholungen sind optional, trag sie ein, wann du willst. Reihenfolge am Griff ⠿ ändern.</span>
+      <span class="label">Kreis antippen hakt den Satz ab. Gewicht und Wiederholungen sind optional, trag sie ein, wann du willst. Reihenfolge am Griff ⠿ ändern.</span>
       <button type="button" class="btn kraft f-cta" data-f="summary">Training abschließen</button>
       <button type="button" class="btn ghost-danger" data-f="reset" data-label="Training verwerfen">Training verwerfen</button></div>`;
     el().scrollTop = st;
@@ -288,7 +288,7 @@ const Focus = (function () {
         ${F.laps.length ? `<ul class="f-sum">${F.laps.map((x, i) => `<li><span>Runde ${i + 1}</span><span class="num">${mmss(x - (i ? F.laps[i - 1] : 0))}</span></li>`).join("")}</ul>` : ""}
         ${feedbackBlock(dayFor(F.date), { cat: "gym" })}
         <button type="button" class="btn rad f-cta" data-f="finish">Fahrt beenden</button>
-        <span class="label" style="letter-spacing:.06em">Die Fahrt zählt automatisch als Radeinheit, sobald sie in Strava ist. War eigentlich ein Intervalltraining dran, gib unter Heute „Andere Einheit“ an, dann wird es nachgeholt.</span></div>`;
+        <span class="label">Die Fahrt zählt automatisch als Radeinheit, sobald sie in Strava ist. War eigentlich ein Intervalltraining dran, gib unter Heute „Andere Einheit“ an, dann wird es nachgeholt.</span></div>`;
       return;
     }
     fc().innerHTML = head("Freie Fahrt", F.runFrom ? "Läuft" : F.phase === "go" ? "Bereit" : "Pause") + `<div class="f-body bike">
@@ -312,7 +312,7 @@ const Focus = (function () {
         ${feedbackBlock(dayFor(F.date), s)}
         ${/FTP/.test(s.title) ? `<button type="button" class="btn rad f-cta" data-f="tests">20′-Schnitt eintragen</button>` : ""}
         <button type="button" class="btn ${/FTP/.test(s.title) ? "" : "rad f-cta"}" data-f="finish">Training beenden</button>
-        <span class="label" style="letter-spacing:.06em">Die Fahrt zählt automatisch, sobald sie in Strava ist.</span></div>`;
+        <span class="label">Die Fahrt zählt automatisch, sobald sie in Strava ist.</span></div>`;
       return;
     }
     fc().innerHTML = head(s.title, F.runFrom ? "Läuft" : F.phase === "go" ? "Bereit" : "Pause") + `<div class="f-body bike">
