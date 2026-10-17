@@ -144,7 +144,8 @@ function decodePoly(str) {
   return pts;
 }
 let routeN = 0;
-function routeSvg(poly, mini) {
+const ROUTE_SEEN = new Map(); // activity id -> when its route started drawing
+function routeSvg(poly, mini, actId) {
   let pts; try { pts = decodePoly(poly || ""); } catch (_) { return ""; }
   if (pts.length < 2) return "";
   const W = mini ? 48 : 360, H = mini ? 48 : 200, pad = mini ? 5 : 18;
@@ -160,7 +161,10 @@ function routeSvg(poly, mini) {
   const loop = Math.hypot(a[0] - z[0], a[1] - z[1]) < (mini ? 3 : 10);
   if (mini) return `<svg class="route-mini" viewBox="0 0 ${W} ${H}" aria-hidden="true"><defs><linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${a[0]}" y1="${a[1]}" x2="${z[0] + 0.01}" y2="${z[1]}"><stop offset="0" stop-color="var(--rad2)"/><stop offset="1" stop-color="var(--rad)"/></linearGradient></defs><path d="${d}" fill="none" stroke="url(#${id})" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   const grid = Array.from({ length: 9 }, (_, i) => `<path d="M${(i + 1) * W / 10} 0V${H}"/>`).join("") + Array.from({ length: 4 }, (_, i) => `<path d="M0 ${(i + 1) * H / 5}H${W}"/>`).join("");
-  return `<svg class="route" viewBox="0 0 ${W} ${H}" role="img" aria-label="Streckenverlauf"><defs>
+  // draw once; a re-render mid-draw continues where it was (negative delay) instead of restarting or jumping
+  let el = 0; if (actId) { if (!ROUTE_SEEN.has(actId)) ROUTE_SEEN.set(actId, performance.now()); el = performance.now() - ROUTE_SEEN.get(actId); }
+  const done = el > 1500;
+  return `<svg class="route${done ? " static" : ""}"${el && !done ? ` style="--rd:${-Math.round(el)}ms"` : ""} viewBox="0 0 ${W} ${H}" role="img" aria-label="Streckenverlauf"><defs>
     <linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${a[0]}" y1="${a[1]}" x2="${(loop ? P[Math.floor(P.length / 2)][0] : z[0]) + 0.01}" y2="${loop ? P[Math.floor(P.length / 2)][1] : z[1]}"><stop offset="0" stop-color="var(--rad2)"/><stop offset=".55" stop-color="var(--rad)"/><stop offset="1" stop-color="var(--violet)"/></linearGradient>
     <filter id="${id}b" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="5"/></filter></defs>
     <g class="route-grid">${grid}</g>
@@ -179,7 +183,7 @@ function rideStats(a) {
 }
 function rideBlock(a, noKind) {
   if (!a) return "";
-  const svg = a.poly ? routeSvg(a.poly) : "";
+  const svg = a.poly ? routeSvg(a.poly, false, a.id) : "";
   return `<div class="ride">${svg ? `<div class="route-wrap">${svg}</div>` : ""}<div class="ride-info">${(() => { const kd = !noKind && rideKind(a); return kd ? `<span class="chip rad ride-kind" title="${esc(kd.detail || "")}"><i></i>${esc(kd.title)}</span>` : ""; })()}<div class="ride-meta"><b>${esc(a.name)}</b><a class="label" href="https://www.strava.com/activities/${encodeURIComponent(a.id)}" target="_blank" rel="noopener">${dm(a.date)} · Auf Strava ↗</a></div>${rideStats(a)}</div></div>`;
 }
 const lastRide = () => S.acts.filter((a) => a.cat === "bike").sort((x, y) => (x.date < y.date ? 1 : x.date > y.date ? -1 : (y.hour || 0) - (x.hour || 0)))[0] || null;
@@ -660,7 +664,7 @@ let sheetI = null;
 function openSheet(i) {
   sheetI = i; const x = R.allDays[i]; if (!x) return; const w = Math.floor(i / 7), past = i <= TI;
   const cur = x.e.rest ? "rest" : x.e.manual ? "m:" + x.e.manual : x.e.pin ? "p:" + x.e.pin : "auto";
-  const now = x.keys.length ? x.keys.map((k) => sess(k, w).title).join(" + ") : x.status === "rest" ? "Ruhetag" : "nichts";
+  const now = x.keys.length ? x.keys.map((k, i) => (i === 0 && sessOf(x) ? sessOf(x).title : sess(k, w).title)).join(" + ") : x.status === "rest" ? "Ruhetag" : "nichts";
   const opts = KEYS.map((k) => { const s = sess(k, w), id = (past ? "m:" : "p:") + k; return `<button type="button" class="opt ${catCls(s.cat)}${cur === id ? " on" : ""}" data-set="${id}"><b>${esc(s.title)}</b><span>${catName(s.cat)} · ${s.min}′</span></button>`; }).join("");
   $("sheet").innerHTML = `<div class="grab"></div><div class="card-h"><div><span class="label">Etappe ${w + 1} · ${esc(PHASE[w])}</span><h2 class="xl" id="sheetTitle" style="font-size:2.4rem;margin-top:4px">${DOWL[x.d]} ${dm(x.date)}</h2></div><button type="button" class="circ" data-close aria-label="Schließen">✕</button></div>
     <span class="muted" style="font-size:.9rem">Aktuell: <b style="color:var(--ink)">${esc(now)}</b>${x.done.some((o) => o.a) ? " · aus Strava" : ""}</span>
@@ -887,7 +891,7 @@ function loadState() {
   const C = L.load("wa.checks"), CC = {}; Object.keys(C).forEach((k) => { const v = C[k]; if (v && Array.isArray(v.ex)) CC[k] = { key: v.key, ex: v.ex.slice() }; }); S.C = CC;
   recalcFtp();
 }
-const ASSET_V = "34";
+const ASSET_V = "35";
 function bootDb() { DB = makeDB(); S.dbOK = true; S.sync = "local"; loadState(); }
 async function syncRemote() {
   try {

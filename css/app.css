@@ -1,5 +1,6 @@
 /* Winter Arc — app shell. Layout: fixed 3D stage at the top, glass content sliding over it,
    bottom tab bar on phones, floating segmented control on desktop. Dark-first. */
+:root{--ease-out:cubic-bezier(.23,1,.32,1);--ease-in-out:cubic-bezier(.77,0,.175,1);--ease-drawer:cubic-bezier(.32,.72,0,1)}
 :root{
   --bg:#05060A; --bg2:#0B0D13; --card:rgba(22,24,32,.62); --card-solid:#14161E; --card-hi:rgba(255,255,255,.06);
   --line:rgba(255,255,255,.08); --line-hi:rgba(255,255,255,.16);
@@ -28,6 +29,9 @@
 
 *{box-sizing:border-box}
 html,body{margin:0}
+html{-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+/* controls behave like native ones: instant taps, no text selection or callout on long-press */
+button,a,[role="button"],.tab,.chip,.opt,.grip,summary{touch-action:manipulation;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 [hidden]{display:none!important}
 img{max-width:100%}
 :root{padding-top:env(safe-area-inset-top,0px)}
@@ -85,8 +89,8 @@ html.has3d .stage-fallback{display:none}
 
 /* ---------- views ---------- */
 main{position:relative;z-index:2}
-.view{animation:viewIn .5s cubic-bezier(.2,.8,.2,1) both}
-@keyframes viewIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.view{animation:viewIn .2s var(--ease-out) both}
+@keyframes viewIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 .hero{height:calc(var(--stage) - var(--head) + 24px);display:flex;flex-direction:column;justify-content:flex-end;gap:6px;padding-inline:20px;padding-block:0 18px;max-width:1160px;margin:0 auto;position:relative;touch-action:pan-y;cursor:grab}
 .hero .xl{font-size:clamp(3.4rem,15vw,7rem);text-shadow:0 6px 40px rgba(0,0,0,.35)}
 .hero .sub{font-size:1rem;color:var(--ink2);max-width:42ch}
@@ -134,8 +138,7 @@ main{position:relative;z-index:2}
 
 /* buttons */
 .btns{display:flex;gap:8px;flex-wrap:wrap}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:46px;padding:0 18px;border-radius:14px;border:1px solid var(--line-hi);background:var(--card-hi);font-weight:600;font-size:.93rem;transition:transform .12s,background .2s,border-color .2s;text-decoration:none;white-space:nowrap}
-.btn:hover{border-color:var(--faint)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:46px;padding:0 18px;border-radius:14px;border:1px solid var(--line-hi);background:var(--card-hi);font-weight:600;font-size:.93rem;transition:transform 140ms var(--ease-out),background-color .2s ease,border-color .2s ease;text-decoration:none;white-space:nowrap}
 .btn:active{transform:scale(.97)}
 .btn.primary{background:var(--ink);color:var(--on-ink);border-color:var(--ink)}
 .btn.rad{background:linear-gradient(100deg,var(--rad),var(--rad2));color:#130700;border:0}
@@ -159,9 +162,9 @@ main{position:relative;z-index:2}
 .spec{font-family:var(--mono);font-size:.74rem;border:1px solid var(--line);border-radius:10px;padding:6px 10px;background:var(--card-hi);white-space:nowrap}
 .spec span{color:var(--muted);margin-right:6px}
 .exgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px}
-.ex{display:flex;align-items:center;gap:12px;text-align:left;border:1px solid var(--line);background:var(--card-hi);border-radius:16px;padding:12px 14px;min-height:54px;min-width:0;transition:background .2s,border-color .2s,transform .12s}
+.ex{display:flex;align-items:center;gap:12px;text-align:left;border:1px solid var(--line);background:var(--card-hi);border-radius:16px;padding:12px 14px;min-height:54px;min-width:0;transition:background-color .2s ease,border-color .2s ease,transform 140ms var(--ease-out)}
 .ex:active{transform:scale(.98)}
-.ex .box{flex:none;width:24px;height:24px;border-radius:8px;border:1.5px solid var(--faint);display:grid;place-items:center;font-size:.8rem;font-weight:800;color:transparent;transition:all .2s}
+.ex .box{flex:none;width:24px;height:24px;border-radius:8px;border:1.5px solid var(--faint);display:grid;place-items:center;font-size:.8rem;font-weight:800;color:transparent;transition:background-color .15s ease,border-color .15s ease,color .15s ease,transform .15s var(--ease-out)}
 .ex .nm{font-weight:600;font-size:.92rem;line-height:1.2;min-width:0}
 .ex .sx{font-family:var(--mono);font-size:.7rem;color:var(--muted);margin-left:auto;white-space:nowrap}
 .ex.on{background:color-mix(in srgb,var(--done) 14%,transparent);border-color:color-mix(in srgb,var(--done) 55%,transparent)}
@@ -173,7 +176,6 @@ main{position:relative;z-index:2}
 .rows{display:flex;flex-direction:column}
 .row{display:grid;grid-template-columns:52px 4px minmax(0,1fr) auto;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid var(--line);text-align:left;width:100%;min-height:64px}
 .row:last-child{border-bottom:0}
-button.row:hover{background:var(--card-hi);border-radius:14px}
 .row .d{display:flex;flex-direction:column;line-height:1.1}
 .row .d b{font-family:var(--display);font-stretch:70%;font-weight:900;font-style:italic;text-transform:uppercase;font-size:1.35rem}
 .row .d span{font-family:var(--mono);font-size:.66rem;color:var(--muted)}
@@ -246,7 +248,6 @@ button.row:hover{background:var(--card-hi);border-radius:14px}
 .feed li{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line);font-size:.9rem}
 .feed li:last-child{border-bottom:0}
 .feed a{text-decoration:none;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.feed a:hover{text-decoration:underline}
 .feed .m{font-family:var(--mono);font-size:.72rem;color:var(--muted);white-space:nowrap}
 .dot{width:8px;height:8px;border-radius:50%;flex:none}
 .empty{color:var(--muted);font-size:.9rem;margin:0}
@@ -256,8 +257,9 @@ button.row:hover{background:var(--card-hi);border-radius:14px}
 .notice>div{border:1px solid var(--line-hi);background:var(--card);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-radius:18px;padding:14px 16px;font-size:.92rem;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
 .scrim{position:fixed;inset:0;background:rgba(0,0,0,.5);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);z-index:60;display:flex;align-items:flex-end;justify-content:center;padding:0 8px calc(8px + env(safe-area-inset-bottom,0px))}
 @media (min-width:700px){.scrim{align-items:center}}
-.sheet{width:100%;max-width:520px;max-height:88vh;overflow:auto;background:var(--sheet);border:1px solid var(--line);border-radius:28px;padding:20px;display:flex;flex-direction:column;gap:14px;box-shadow:var(--shadow);animation:sheetIn .35s cubic-bezier(.2,.8,.2,1)}
-@keyframes sheetIn{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}
+.sheet{width:100%;max-width:520px;max-height:88vh;max-height:88dvh;overflow:auto;overscroll-behavior:contain;background:var(--sheet);border:1px solid var(--line);border-radius:28px;padding:20px;display:flex;flex-direction:column;gap:14px;box-shadow:var(--shadow);animation:sheetIn .4s var(--ease-drawer)}
+@keyframes sheetIn{from{transform:translateY(100%)}to{transform:none}}
+@media (min-width:700px){@keyframes sheetIn{from{transform:translateY(16px) scale(.98);opacity:0}to{transform:none;opacity:1}}}
 .sheet .grab{width:40px;height:5px;border-radius:5px;background:var(--line-hi);margin:-6px auto 0}
 .optgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .opt{border:1px solid var(--line);background:var(--card-hi);border-radius:16px;padding:12px;text-align:left;display:flex;flex-direction:column;gap:2px;min-width:0;min-height:58px}
@@ -282,13 +284,11 @@ button.row:hover{background:var(--card-hi);border-radius:14px}
 .exrow .nm{grid-area:nm;font-weight:600;font-size:.93rem;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .exrow .step{grid-area:step;display:flex;align-items:center;gap:2px;border:1px solid var(--line);border-radius:10px;padding:2px}
 .exrow .step button{width:30px;height:30px;border-radius:8px;font-size:1.05rem;font-weight:700}
-.exrow .step button:hover{background:var(--card-hi)}
 .exrow .step b{min-width:16px;text-align:center;font-family:var(--mono);font-size:.85rem}
 .exrow .rep{grid-area:rep;font-family:var(--mono);font-size:.74rem;border:1px solid var(--line);border-radius:10px;padding:0 9px;height:36px;white-space:nowrap}
 .exrow .ord{grid-area:ord;display:flex;gap:4px;justify-content:flex-end}
 .exrow .ord button{width:32px;height:28px;border-radius:8px;border:1px solid var(--line);font-size:.8rem;color:var(--muted)}
 .exrow .ord button:disabled{opacity:.3}
-.exrow .ord button:last-child:hover{color:var(--bad);border-color:var(--bad)}
 @media (min-width:900px){.exrow{grid-template-columns:minmax(0,1fr) auto auto auto;grid-template-areas:"nm step rep ord"}}
 .exadd{display:flex;gap:8px}
 input[type=text],input[type=number]{font:inherit;color:var(--ink);background:var(--card-hi);border:1px solid var(--line-hi);border-radius:12px;padding:0 12px;min-height:44px;min-width:0;width:100%}
@@ -331,7 +331,7 @@ input:disabled{opacity:.45}
 .exlog.on{background:color-mix(in srgb,var(--done) 10%,transparent);border-color:color-mix(in srgb,var(--done) 50%,transparent)}
 .exlog.extra{border-style:dashed}
 .ex-h{display:flex;align-items:center;gap:12px;text-align:left;min-height:36px;width:100%}
-.ex-h .box{flex:none;width:26px;height:26px;border-radius:8px;border:1.5px solid var(--faint);display:grid;place-items:center;font-size:.8rem;font-weight:800;color:transparent;transition:all .2s}
+.ex-h .box{flex:none;width:26px;height:26px;border-radius:8px;border:1.5px solid var(--faint);display:grid;place-items:center;font-size:.8rem;font-weight:800;color:transparent;transition:background-color .15s ease,border-color .15s ease,color .15s ease,transform .15s var(--ease-out)}
 .exlog.on .ex-h .box{background:var(--done);border-color:var(--done);color:var(--on-ink)}
 .ex-h .nm{font-weight:600;font-size:.95rem;min-width:0;line-height:1.2}
 .exlog.on .ex-h .nm{color:var(--done)}
@@ -353,7 +353,6 @@ textarea:focus{outline:2px solid var(--kraft2);outline-offset:1px}
 .exlog{position:relative}
 .ex-h{padding-right:34px}
 .ex-rm{position:absolute;top:10px;right:10px;width:30px;height:30px;border-radius:9px;border:1px solid var(--line);color:var(--muted);font-size:.8rem;display:grid;place-items:center}
-.ex-rm:hover{color:var(--bad);border-color:var(--bad)}
 
 .change{border-top:1px dashed var(--line-hi);padding-top:12px}
 .change summary{display:flex;justify-content:space-between;align-items:center;gap:10px;cursor:pointer;list-style:none;min-height:36px}
@@ -366,7 +365,7 @@ textarea:focus{outline:2px solid var(--kraft2);outline-offset:1px}
 .change .fb-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}
 
 /* iOS Safari zooms into inputs below 16px */
-input[type=text],input[type=number],textarea{font-size:16px}
+input[type=text],input[type=number],input[type=email],textarea,select{font-size:16px}
 
 .sheet-ex{border-top:1px dashed var(--line-hi);padding-top:12px}
 
@@ -374,9 +373,9 @@ input[type=text],input[type=number],textarea{font-size:16px}
 body.focus-open{overflow:hidden}
 .focus{position:fixed;inset:0;z-index:90;overflow-y:auto;overscroll-behavior:contain;color:var(--ink);
   background:radial-gradient(120% 60% at 50% -10%,var(--fglow,rgba(76,125,255,.35)),transparent 60%),radial-gradient(80% 50% at 100% 100%,rgba(138,92,255,.18),transparent 70%),var(--bg);
-  padding:calc(env(safe-area-inset-top,0px) + 8px) 16px calc(env(safe-area-inset-bottom,0px) + 24px);animation:fIn .45s cubic-bezier(.2,.8,.2,1)}
+  padding:calc(env(safe-area-inset-top,0px) + 8px) 16px calc(env(safe-area-inset-bottom,0px) + 24px);animation:fIn .3s var(--ease-out)}
 .focus[data-cat="bike"]{--fglow:rgba(255,106,43,.32)}
-@keyframes fIn{from{opacity:0;transform:scale(1.03)}to{opacity:1;transform:none}}
+@keyframes fIn{from{opacity:0;transform:scale(1.02)}to{opacity:1;transform:none}}
 .focus>*{max-width:620px;margin-left:auto;margin-right:auto}
 .f-top{display:grid;grid-template-columns:44px minmax(0,1fr) auto;align-items:center;gap:12px;min-height:56px}
 .f-x{width:44px;height:44px;border-radius:50%;border:1px solid var(--line-hi);background:var(--card);font-size:1rem}
@@ -433,7 +432,6 @@ body.focus-open{overflow:hidden}
 
 /* drag to reorder */
 .grip{display:grid;place-items:center;width:30px;height:36px;border-radius:9px;color:var(--muted);font-size:1.1rem;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;flex:none}
-.grip:hover{color:var(--ink);background:var(--card-hi)}
 .exlog.sortable{padding-left:44px}
 .exlog .grip{position:absolute;left:8px;top:10px}
 .exrow{grid-template-columns:30px minmax(0,1fr) auto auto;grid-template-areas:"grip nm step rep" "grip ord ord ord"}
@@ -514,7 +512,6 @@ body.focus-open{overflow:hidden}
 .f-exn b{font-family:var(--display);font-stretch:70%;font-weight:900;font-style:italic;text-transform:uppercase;font-size:1.45rem;line-height:1.05;hyphens:auto;-webkit-hyphens:auto;overflow-wrap:break-word}
 .f-exn .label{letter-spacing:.06em;text-transform:none;font-size:.72rem}
 .f-rm{width:34px;height:34px;border-radius:10px;border:1px solid var(--line);color:var(--muted);font-size:.8rem}
-.f-rm:hover{color:var(--bad);border-color:var(--bad)}
 .f-excard .f-setrow{background:var(--card-hi);backdrop-filter:none;-webkit-backdrop-filter:none;border-radius:16px;padding:6px}
 .f-excard .f-chk{width:46px;height:46px;border-radius:14px}
 .f-excard .f-setrow{grid-template-columns:46px minmax(0,1fr) minmax(0,1fr)}
@@ -556,7 +553,7 @@ body.focus-open{overflow:hidden}
 .f-spbar i{display:block;height:100%;background:#1ED760;transition:width .9s linear}
 .f-splists{display:flex;flex-direction:column;gap:4px;max-height:42vh;overflow:auto;padding-top:4px}
 .f-spl{display:flex;align-items:center;gap:10px;min-height:44px;padding:4px 6px;border-radius:12px;text-align:left}
-.f-spl:active,.f-spl:hover{background:var(--line-hi)}
+.f-spl:active{background:var(--line-hi)}
 .f-spl i{width:36px;height:36px;border-radius:8px;flex:none;background:#1ED760 center/cover no-repeat}
 .f-spl span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:.9rem}
 .btn.sp{background:#1ED760;color:#0b0b0b;border-color:transparent}
@@ -572,9 +569,9 @@ body.focus-open{overflow:hidden}
 .route{display:block;width:100%;height:auto;aspect-ratio:9/5}
 .route-grid path{stroke:var(--line);stroke-width:.6;fill:none}
 .route-glow{fill:none;stroke-width:7;stroke-linecap:round;stroke-linejoin:round;opacity:.55}
-.route-line{fill:none;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:1;stroke-dashoffset:1;animation:route-draw 1.6s cubic-bezier(.6,.05,.25,1) .15s forwards}
+.route-line{fill:none;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:1;stroke-dashoffset:1;animation:route-draw 1.2s var(--ease-in-out) calc(100ms + var(--rd,0ms)) forwards}
 .route-start{fill:var(--done);stroke:var(--bg);stroke-width:2.5}
-.route-end{fill:var(--ink);stroke:var(--violet);stroke-width:2.5;opacity:0;animation:route-pop .3s ease 1.6s forwards}
+.route-end{fill:var(--ink);stroke:var(--violet);stroke-width:2.5;opacity:0;animation:route-pop .25s var(--ease-out) calc(1250ms + var(--rd,0ms)) forwards}
 @keyframes route-draw{to{stroke-dashoffset:0}}
 @keyframes route-pop{to{opacity:1}}
 @media (prefers-reduced-motion:reduce){.route-line{animation:none;stroke-dashoffset:0}.route-end{animation:none;opacity:1}}
@@ -625,3 +622,25 @@ body.focus-open{overflow:hidden}
 .f-excard.untracked{opacity:.62}
 .f-excard.untracked .f-exn .label{color:var(--rad2)}
 .prev.untracked{color:var(--rad2)}
+
+/* hover only where a real pointer can hover: no stuck hover after a tap on phones */
+@media (hover: hover) and (pointer: fine){
+.btn:hover{border-color:var(--faint)}
+button.row:hover{background:var(--card-hi);border-radius:14px}
+.feed a:hover{text-decoration:underline}
+.exrow .step button:hover{background:var(--card-hi)}
+.exrow .ord button:last-child:hover{color:var(--bad);border-color:var(--bad)}
+.ex-rm:hover{color:var(--bad);border-color:var(--bad)}
+.grip:hover{color:var(--ink);background:var(--card-hi)}
+.f-rm:hover{color:var(--bad);border-color:var(--bad)}
+.f-spl:hover{background:var(--line-hi)}
+}
+/* press feedback the moment the finger lands (100–160 ms, ease-out) */
+.opt,button.row,.tab,.f-chk,.ex-h,.tl-i,.f-dot,.f-x,.f-rm,.ex-rm,.f-mtoggle,.f-spl,.sheet .opt{transition:transform 140ms var(--ease-out),background-color 140ms ease,border-color 140ms ease,color 140ms ease}
+.opt:active,button.row:active,.tab:active,.f-chk:active,.ex-h:active,.tl-i:active,.f-x:active,.f-rm:active,.ex-rm:active,.f-mtoggle:active{transform:scale(.97)}
+/* a route draws itself once; on later re-renders it just stands there */
+.route.static .route-line{animation:none;stroke-dashoffset:0}
+.route.static .route-end{animation:none;opacity:1}
+.toast:not([hidden]){animation:toastIn .2s var(--ease-out)}
+@keyframes toastIn{from{opacity:0;transform:translate(-50%,8px)}to{opacity:1;transform:translateX(-50%)}}
+@media (prefers-reduced-motion:reduce){.focus,.toast:not([hidden]){animation:none}.opt:active,button.row:active,.btn:active{transform:none}}
